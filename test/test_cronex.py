@@ -110,6 +110,48 @@ class test_testedmodule(unittest.TestCase):
         self.assertEqual(testex1.comment, testex2.comment)
         self.assertEqual(repr(testex1), str(testex1))
 
+    def test_dom_substitution(self):
+        testex1 = cronex.CronExpression(
+            "* * * jan,feb,mar,apr,may,jun,jul,aug,sep,oct,nov,dec *")
+        testex2 = cronex.CronExpression("* * * 1,2,3,4,5,6,7,8,9,10,11,12 *")
+        self.assertEqual(repr(testex1), repr(testex2))
+
+    def test_dow_substitution(self):
+        testex1 = cronex.CronExpression("* * * * sun,mon,tue,wed,thu,fri,sat")
+        testex2 = cronex.CronExpression("* * * * 0,1,2,3,4,5,6")
+        self.assertEqual(repr(testex1), repr(testex2))
+
+    def test_dom_either_or_dow(self):
+        testex = cronex.CronExpression("0 0 5 * mon")
+        self.assertTrue(testex.check_trigger(2010,11,5,0,0))
+        self.assertTrue(testex.check_trigger(2010,11,1,0,0))
+        self.assertTrue(testex.check_trigger(2010,11,8,0,0))
+        self.assertTrue(testex.check_trigger(2010,11,15,0,0))
+        self.assertTrue(testex.check_trigger(2010,11,22,0,0))
+        self.assertTrue(testex.check_trigger(2010,11,29,0,0))
+
+        testex = cronex.CronExpression("0 0 * * wed")
+        for d in xrange(1,32):
+            if not(d % 7):
+                self.assertTrue(testex.check_trigger(2010,7,d,0,0))
+            else:
+                self.assertFalse(testex.check_trigger(2010,7,d,0,0))
+
+
+    def test_L_in_dow(self):
+        testex = cronex.CronExpression("0 0 * * 6L")
+        tv = [30,27,27,24,29,26,31,28,25,30,27,25]
+        for v in xrange(0,12):
+            self.assertTrue(testex.check_trigger(2010,v+1,tv[v],0,0))
+
+    def test_L_in_dom(self):
+        testex = cronex.CronExpression("0 0 L * *")
+        import calendar
+        for y in xrange(2000, 2009):
+            for v in xrange(1,13):
+                self.assertTrue(testex.check_trigger(y,v,calendar.monthrange(
+                    y,v)[-1],0,0))
+
 def suite():
     s = unittest.makeSuite(test_testedmodule)
     return unittest.TestSuite([s])

@@ -167,7 +167,7 @@ HOURS = (0, 23)
 DAYS_OF_MONTH = (1, 31)
 MONTHS = (1, 12)
 DAYS_OF_WEEK = (0, 6)
-SUPPORTS_L_CHR = (DAYS_OF_WEEK, DAYS_OF_MONTH)
+L_FIELDS = (DAYS_OF_WEEK, DAYS_OF_MONTH)
 FIELD_RANGES = (MINUTES, HOURS, DAYS_OF_MONTH, MONTHS, DAYS_OF_WEEK)
 MONTH_NAMES = zip(('jan', 'feb', 'mar', 'apr', 'may', 'jun',
                    'jul', 'aug', 'sep', 'oct', 'nov', 'dec'), xrange(1, 13))
@@ -232,17 +232,21 @@ class CronExpression(object):
         Recomputes the sets for the static ranges of the trigger time
         """
         self.numerical_tab = []
-        for cron_field, span in zip(self.string_tab, FIELD_RANGES):
+
+        for field_str, span in zip(self.string_tab, FIELD_RANGES):
             unified = set()
-            for cron_expression in cron_field.split(','):
+            for cron_atom in field_str.split(','):
                 # parse_atom only handles static cases
                 for special_char in ('%', '#', 'L', 'W'):
-                    if special_char in cron_expression:
+                    if special_char in cron_atom:
                         break
                 else:
-                    unified.update(parse_atom(cron_expression, span))
+                    unified.update(parse_atom(cron_atom, span))
 
             self.numerical_tab.append(unified)
+
+        if self.string_tab[2] == "*" and self.string_tab[4] != "*":
+            self.numerical_tab[2] = set()
 
     def check_trigger(self, year, month, day, hour, mins):
         """
@@ -253,6 +257,7 @@ class CronExpression(object):
         lastdom = calendar.monthrange(year, month)[-1]
 
         # In "calendar.monthrange" and datetime.date.weekday, Monday = 0
+
         givendow = (datetime.date.weekday(givenday) + 1) % 7
         firstdow = (givendow + 1 - day) % 7
 
@@ -264,13 +269,14 @@ class CronExpression(object):
         mod_delta_min = mins - self.epoch[4] + mod_delta_hrs * 60
 
         # Makes iterating through like components easier.
-        quaple = zip(
+        quintuple = zip(
             (mins, hour, day, month, givendow),
             self.numerical_tab,
             self.string_tab,
-            (mod_delta_min, mod_delta_hrs, mod_delta_day, mod_delta_mon, 0))
+            (mod_delta_min, mod_delta_hrs, mod_delta_day, mod_delta_mon, 0),
+            FIELD_RANGES)
 
-        for value, validnums, cron_field, timediff in quaple:
+        for value, validnums, field_str, timediff, field_type in quintuple:
             # All valid, static values for the fields are stored in sets
             if value in validnums:
                 continue
@@ -281,19 +287,19 @@ class CronExpression(object):
             # in the outer loop. If there are no matches found, the given date
             # does not match expression constraints, so the function returns
             # False as seen at the end of this for...else... construct.
-            for cron_expression in cron_field.split(','):
-                if cron_expression[0] == '%':
-                    if not(timediff % int(cron_expression[1:])):
+            for cron_atom in field_str.split(','):
+                if cron_atom[0] == '%':
+                    if not(timediff % int(cron_atom[1:])):
                         break
 
-                elif cron_field == DAYS_OF_WEEK and cron_expression[1] == '#':
-                    D, N = int(cron_expression[0]), int(cron_expression[2])
+                elif field_type == DAYS_OF_WEEK and '#' in cron_atom:
+                    D, N = int(cron_atom[0]), int(cron_atom[2])
                     # Computes Nth occurence of D day of the week
                     if (((D - firstdow) % 7) + 1 + 7 * (N - 1)) == day:
                         break
 
-                elif cron_field == DAYS_OF_MONTH and cron_expression[-1] == 'W':
-                    target = min(int(cron_expression[:-1]), lastdom)
+                elif field_type == DAYS_OF_MONTH and cron_atom[-1] == 'W':
+                    target = min(int(cron_atom[:-1]), lastdom)
                     lands_on = (firstdow + target - 1) % 7
                     if lands_on == 0:
                         # Shift from Sun. to Mon. unless Mon. is next month
@@ -306,19 +312,26 @@ class CronExpression(object):
                     if target == day and (firstdow + target - 7) % 7 > 1:
                         break
 
-                elif cron_field in SUPPORTS_L_CHR and cron_expression.endswith('L'):
+                elif field_type in L_FIELDS and cron_atom.endswith('L'):
                     # In dom field, translates to last d.o.m.
                     target = lastdom
 
-                    if cron_field == DAYS_OF_WEEK:
+                    if field_type == DAYS_OF_WEEK:
                         # Calculates the last occurence of given day of week
-                        desired_dow = int(cron_expression[:-1])
+                        desired_dow = int(cron_atom[:-1])
                         target = (((desired_dow - firstdow) % 7) + 29)
                         target -= 7 if target > lastdom else 0
 
                     if target == day:
                         break
             else:
+                # See 2010.11.14 of CHANGELOG
+                if field_type == DAYS_OF_MONTH and self.string_tab[4] != '*':
+                    continue
+                elif field_type == DAYS_OF_WEEK and self.string_tab[2] != '*':
+                    # If we got here, then days of months validated.
+                    return True
+
                 # None of the expressions matched which means this field fails
                 return False
 
@@ -330,8 +343,8 @@ def parse_atom(parse, minmax):
     """
     Returns valid values for a given cron-style range of numbers.
 
-    :minmax: Length 2 iterable containing the valid suffix and prefix bounds for
-    the range. The range is inclusive on both bounds.
+    :minmax: Length 2 iterable containing the valid suffix and prefix bounds
+    for the range. The range is inclusive on both bounds.
 
     Examples:
     >>> parse_atom("1-5",(0,6))
@@ -377,7 +390,7 @@ def parse_atom(parse, minmax):
         else:
             # Example: 12-4/2; (12, 12 + n, ..., 12 + m*n) U (n_0, ..., 4)
             top = xrange(prefix, minmax[1] + 1, increment)
-            adjustment = increment - (minmax[1] - top[-1] - 1)
-            bottom = set(xrange(adjustment - minmax[0], suffix + 1, increment))
+            ceilvalue = increment - (minmax[1] - top[-1] - 1)
+            bottom = set(xrange(ceilvalue - minmax[0], suffix + 1, increment))
             bottom.update(top)
             return bottom

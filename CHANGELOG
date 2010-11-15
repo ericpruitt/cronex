@@ -1,0 +1,27 @@
+CHANGELOG
+
+2010.11.15; Friday
+    My implementation's handling the day of the month and day of the week was
+    incorrect:
+
+        $ man 5 crontab
+
+        > Note: The day of a command's execution can be specified by two
+        > fields - day of month, and day of week. If both fields are
+        > restricted (i.e., aren't *), the command will be run when either
+        > field matches the current time. For example, "30 4 1,15 * 5" would
+        > cause a command to be run at 4:30 am on the 1st and 15th of each
+        > month, plus every Friday.
+
+    Unit test added to reflect the above change. I now know why some versions
+    of cron use a "?" in the dom / dow fields.
+
+    Added unit tests for month and day of the week substitution.
+
+    Realized I broke L, W, # checking before the initial commit. Fixed and
+    unit testing added for L in dow and dom fields.
+
+    Renamed some variables.
+
+2010.11.14; Thursday
+    First version is done, unit tested, and documented.
