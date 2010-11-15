@@ -1,6 +1,6 @@
 CHANGELOG
 
-2010.11.15; Friday
+2010.11.15; Monday
     My implementation's handling the day of the month and day of the week was
     incorrect:
 
@@ -23,5 +23,5 @@ CHANGELOG
 
     Renamed some variables.
 
-2010.11.14; Thursday
+2010.11.14; Sunday
     First version is done, unit tested, and documented.
