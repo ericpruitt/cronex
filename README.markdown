@@ -48,7 +48,7 @@ interpreted to mean October, November, December, January and February.
 
 ### Wild-cards ###
 
-Wild-cards, indicated with a "*", in a field represents all valid
+Wild-cards, indicated with a "\*", in a field represents all valid
 values. It is the same as 0-59 for minutes, 0-23 for hours, 1-31 for
 days, 1-12 for months and 0-6 for weekdays.
 
@@ -62,14 +62,14 @@ equivalent to "1,3,5,7,9".
 ### Periodic ###
 
 In standard cron format, an approximation to trigger an event every 10
-days might look like this: "0 0 */10 * *". This works fine for January:
+days might look like this: "0 0 \*/10 \* \*". This works fine for January:
 The trigger is active on January 1st, 11th, and 31st; but in February,
 the trigger will be active on February 1st, far ahead of schedule. One
-"solution" would be to instead use "0 0 10,20,30 * *", but this still
+"solution" would be to instead use "0 0 10,20,30 \* \*", but this still
 does not produce an event consistently every 10 days. This is the
 problem that periodicity addresses. Periodicity is represented as a "%"
 followed by the length of each period. The length of the period can be
-outside the bounds normal ranges of each field. "0 0 %45 * *" would be
+outside the bounds normal ranges of each field. "0 0 %45 \* \*" would be
 active every 45 days. All periodicities are calculated starting from the
 epoch and are independent of each other.
 
@@ -80,23 +80,23 @@ There are three additional special symbols: "L", "W" and "#".
 When used in the day of the month field, a number followed by "L"
 represents the occurrence of a day of the week represented by the value
 preceding "L". In the day of the month field, "L" without a prefixed
-integer represents the last day of the month. "0 0 * * 5L" represent a
-midnight trigger for the last Friday of each month whereas "0 0 L 2 *"
+integer represents the last day of the month. "0 0 \* \* 5L" represent a
+midnight trigger for the last Friday of each month whereas "0 0 L 2 \*"
 represents a midnight trigger for the last day of every February.
 
 "W" is only valid for the field representing days of the month, and must
 be prefixed with an integer. It specifies the weekday (Monday-Friday)
-nearest the given day. In the construct "0 0 7W * *", when the 7th falls
+nearest the given day. In the construct "0 0 7W \* \*", when the 7th falls
 on a Saturday, the trigger will be active on the 6th. If the 7th falls
 on a Sunday, the trigger will be active on the 8th.
 
 "#" is only valid for the field representing days of the week. The "#"
 has a prefix and suffix that represent the day of the week and the Nth
-occurrence of that day of the week. "0 0 * * 0#5" would trigger every
+occurrence of that day of the week. "0 0 \* \* 0#5" would trigger every
 5th Sunday.
 
 All of the constructs above can be combined in individual fields using
-commas: "0,30 */7,5 1,%90,L 9-4/6,5-8 4#2" is a completely valid, albeit
+commas: "0,30 \*/7,5 1,%90,L 9-4/6,5-8 4#2" is a completely valid, albeit
 it hideous, expression.
 
 SPECIAL STRINGS
