@@ -4,9 +4,8 @@
 import os
 import site
 import unittest
-
-import cronex
 import time
+import sys
 
 MINUTE = 60
 HOUR = 60 * MINUTE
@@ -17,7 +16,21 @@ DAY = 24 * HOUR
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.realpath(__file__)), os.pardir))
 
+import cronex
+
 class test_testedmodule(unittest.TestCase):
+    def test_substitution(self):
+        testcases = [("@yearly", "0 0 1 1 *"),
+            ("@anually", "0 0 1 1 *"),
+            ("@monthly", "0 0 1 * *"),
+            ("@weekly", "0 0 * * 0"),
+            ("@daily", "0 0 * * *"),
+            ("@midnight", "0 0 * * *"),
+            ("@hourly", "0 * * * *")]
+        for a, b in testcases:
+            obj = cronex.CronExpression(a)
+            self.assertTrue(b in repr(obj))
+
     def test_compute_numtab(self):
         testex1 = cronex.CronExpression("*/7 5-10 5 * *")
         testex2 = cronex.CronExpression("*/5 23-2 5 8 *")

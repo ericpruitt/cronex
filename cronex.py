@@ -189,9 +189,9 @@ class CronExpression(object):
         """
         self.rawentry = line.strip()
 
-        for key in SUBSTITUTIONS:
+        for key, value in SUBSTITUTIONS.items():
             if line.startswith(key):
-                line = line.replace(key, SUBSTITUTIONS[key])
+                line = line.replace(key, value)
                 break
 
         fields = line.split(None, 5)
