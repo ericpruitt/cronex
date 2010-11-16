@@ -46,30 +46,30 @@ class test_testedmodule(unittest.TestCase):
         then = time.gmtime(now - 491 * DAY)
         now_tuple = time.gmtime(now)
         testex = cronex.CronExpression("* * %491 * *")
-        self.assertFalse(testex.check_trigger(*now_tuple[:5]))
-        testex.epoch = epoch = then[:5]
-        self.assertTrue(testex.check_trigger(*now_tuple[:5]))
-        self.assertTrue(testex.check_trigger(*epoch))
+        self.assertFalse(testex.check_trigger(now_tuple[:5]))
+        testex.epoch = tuple(list(then[:5]) + [0])
+        self.assertTrue(testex.check_trigger(now_tuple[:5]))
+        self.assertTrue(testex.check_trigger(then[:5]))
 
     def test_periodics_hours(self):
         now = int(time.time())
         then = time.gmtime(now - 9001 * HOUR)
         now_tuple = time.gmtime(now)
         testex = cronex.CronExpression("* %9001 * * *")
-        self.assertFalse(testex.check_trigger(*now_tuple[:5]))
-        testex.epoch = epoch = then[:5]
-        self.assertTrue(testex.check_trigger(*now_tuple[:5]))
-        self.assertTrue(testex.check_trigger(*epoch))
+        self.assertFalse(testex.check_trigger(now_tuple[:5]))
+        testex.epoch = tuple(list(then[:5]) + [0])
+        self.assertTrue(testex.check_trigger(now_tuple[:5]))
+        self.assertTrue(testex.check_trigger(then[:5]))
 
     def test_periodics_minutes(self):
         now = int(time.time())
         then = time.gmtime(now - 814075 * MINUTE)
         now_tuple = time.gmtime(now)
         testex = cronex.CronExpression("%814075 * * * *")
-        self.assertFalse(testex.check_trigger(*now_tuple[:5]))
-        testex.epoch = epoch = then[:5]
-        self.assertTrue(testex.check_trigger(*now_tuple[:5]))
-        self.assertTrue(testex.check_trigger(*epoch))
+        self.assertFalse(testex.check_trigger(now_tuple[:5]))
+        testex.epoch = tuple(list(then[:5]) + [0])
+        self.assertTrue(testex.check_trigger(now_tuple[:5]))
+        self.assertTrue(testex.check_trigger(then[:5]))
 
     def test_periodics_month(self):
         now = int(time.time())
@@ -79,10 +79,10 @@ class test_testedmodule(unittest.TestCase):
         thnmon = then[1]
         per = 36 + curmon - thnmon
         testex = cronex.CronExpression("* * * %%%i *" % per)
-        self.assertFalse(testex.check_trigger(*now_tuple[:5]))
-        testex.epoch = epoch = then[:5]
-        self.assertTrue(testex.check_trigger(*now_tuple[:5]))
-        self.assertTrue(testex.check_trigger(*epoch))
+        self.assertFalse(testex.check_trigger(now_tuple[:5]))
+        testex.epoch = tuple(list(then[:5]) + [0])
+        self.assertTrue(testex.check_trigger(now_tuple[:5]))
+        self.assertTrue(testex.check_trigger(then[:5]))
 
     def test_parse_atom(self):
         input_expect = [
@@ -123,34 +123,39 @@ class test_testedmodule(unittest.TestCase):
 
     def test_dom_either_or_dow(self):
         testex = cronex.CronExpression("0 0 5 * mon")
-        self.assertTrue(testex.check_trigger(2010,11,5,0,0))
-        self.assertTrue(testex.check_trigger(2010,11,1,0,0))
-        self.assertTrue(testex.check_trigger(2010,11,8,0,0))
-        self.assertTrue(testex.check_trigger(2010,11,15,0,0))
-        self.assertTrue(testex.check_trigger(2010,11,22,0,0))
-        self.assertTrue(testex.check_trigger(2010,11,29,0,0))
+        self.assertTrue(testex.check_trigger((2010,11,5,0,0)))
+        self.assertTrue(testex.check_trigger((2010,11,1,0,0)))
+        self.assertTrue(testex.check_trigger((2010,11,8,0,0)))
+        self.assertTrue(testex.check_trigger((2010,11,15,0,0)))
+        self.assertTrue(testex.check_trigger((2010,11,22,0,0)))
+        self.assertTrue(testex.check_trigger((2010,11,29,0,0)))
 
         testex = cronex.CronExpression("0 0 * * wed")
         for d in xrange(1,32):
             if not(d % 7):
-                self.assertTrue(testex.check_trigger(2010,7,d,0,0))
+                self.assertTrue(testex.check_trigger((2010,7,d,0,0)))
             else:
-                self.assertFalse(testex.check_trigger(2010,7,d,0,0))
-
+                self.assertFalse(testex.check_trigger((2010,7,d,0,0)))
 
     def test_L_in_dow(self):
         testex = cronex.CronExpression("0 0 * * 6L")
         tv = [30,27,27,24,29,26,31,28,25,30,27,25]
         for v in xrange(0,12):
-            self.assertTrue(testex.check_trigger(2010,v+1,tv[v],0,0))
+            self.assertTrue((testex.check_trigger((2010,v+1,tv[v],0,0))))
 
     def test_L_in_dom(self):
         testex = cronex.CronExpression("0 0 L * *")
         import calendar
         for y in xrange(2000, 2009):
             for v in xrange(1,13):
-                self.assertTrue(testex.check_trigger(y,v,calendar.monthrange(
-                    y,v)[-1],0,0))
+                self.assertTrue(testex.check_trigger((y,v,calendar.monthrange(
+                    y,v)[-1],0,0)))
+
+    def test_calendar_change_vs_hour_change(self):
+        testex = cronex.CronExpression("0 0 %2 * *",utc_offset=-6)
+        self.assertTrue(
+
+
 
 def suite():
     s = unittest.makeSuite(test_testedmodule)
