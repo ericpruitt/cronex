@@ -152,9 +152,13 @@ class test_testedmodule(unittest.TestCase):
                     y,v)[-1],0,0)))
 
     def test_calendar_change_vs_hour_change(self):
-        testex = cronex.CronExpression("0 0 %2 * *",utc_offset=-6)
-        self.assertTrue(
-
+        epoch = (2010, 11, 16, 23, 59)    # epoch and local
+        local_time = (2010, 11, 18, 0, 0) # differ by < 48 hours
+                                          # but the trigger should
+                                          # still run because it's
+                                          # two calendar days locally
+        testex = cronex.CronExpression("0 0 %2 * *",epoch, -6)
+        self.assertTrue(testex.check_trigger(local_time, -6))
 
 
 def suite():
