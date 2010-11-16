@@ -1,5 +1,12 @@
 CHANGELOG
 
+2010.11.16; Tuesday
+    The epoch is now a six element tuple. The last element represents
+    offset from UTC. CronexExrepssion.check_trigger now uses a tuple
+    for the date and accepts and additional option for UTC offset.
+
+    Documentation removed from the docstring.
+
 2010.11.15; Monday
     My implementation's handling the day of the month and day of the week was
     incorrect:
