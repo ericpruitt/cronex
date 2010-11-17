@@ -51,9 +51,11 @@ class CronExpression(object):
     def __init__(self, line, epoch=DEFAULT_EPOCH, epoch_utc_offset=0):
         """
         Instantiates a CronExpression object with an optionally defined epoch.
+        If the epoch is defined, the UTC offset can be specified one of two
+        ways: as the sixth element in 'epoch' or supplied in epoch_utc_offset.
+        The epoch should be defined down to the minute sorted by
+        descending significance.
         """
-        self.rawentry = line.strip()
-
         for key, value in SUBSTITUTIONS.items():
             if line.startswith(key):
                 line = line.replace(key, value)
@@ -84,10 +86,10 @@ class CronExpression(object):
 
     def __str__(self):
         base = self.__class__.__name__ + "(%s)"
-        strformat = self.string_tab + [self.comment]
+        cron_line = self.string_tab + [self.comment]
         if not self.comment:
-            strformat.pop()
-        arguments = '"' + ' '.join(strformat) + '"'
+            cron_line.pop()
+        arguments = '"' + ' '.join(cron_line) + '"'
         if self.epoch != DEFAULT_EPOCH:
             return base % (arguments + ", epoch=" + repr(self.epoch))
         else:
@@ -98,13 +100,20 @@ class CronExpression(object):
 
     def compute_numtab(self):
         """
-        Recomputes the sets for the static ranges of the trigger time
+        Recomputes the sets for the static ranges of the trigger time.
+
+        This method should only be called by the user if the string_tab
+        member is modified.
         """
         self.numerical_tab = []
 
         for field_str, span in zip(self.string_tab, FIELD_RANGES):
             unified = set()
-            for cron_atom in field_str.split(','):
+            split_field_str = field_str.split(',')
+            if len(split_field_str) > 1 and "*" in split_field_str:
+                raise ValueError("\"*\" must be alone in a field.")
+
+            for cron_atom in split_field_str:
                 # parse_atom only handles static cases
                 for special_char in ('%', '#', 'L', 'W'):
                     if special_char in cron_atom:
@@ -119,36 +128,41 @@ class CronExpression(object):
 
     def check_trigger(self, date_tuple, utc_offset=0):
         """
-        Returns boolean indicating whether the trigger fires at the given time
+        Returns boolean indicating if the trigger is active at the given time.
+        The date tuple should be in the local time. Unless periodicities are
+        used, utc_offset does not need to be specified. If periodicities are
+        used, specifically in the hour and minutes fields, it is crucial that
+        the utc_offset is specified.
         """
         year, month, day, hour, mins = date_tuple
-        givenday = datetime.date(year, month, day)
+        given_date = datetime.date(year, month, day)
         zeroday = datetime.date(*self.epoch[:3])
-        lastdom = calendar.monthrange(year, month)[-1]
+        last_dom = calendar.monthrange(year, month)[-1]
 
-        # In calendar.monthrange and datetime.date.weekday, Monday = 0
-        givendow = (datetime.date.weekday(givenday) + 1) % 7
-        firstdow = (givendow + 1 - day) % 7
+        # In calendar and datetime.date.weekday, Monday = 0
+        given_dow = (datetime.date.weekday(given_date) + 1) % 7
+        first_dow = (given_dow + 1 - day) % 7
 
         # Figure out how much time has passed from the epoch to the given date
         utc_diff = utc_offset - self.epoch[5]
         mod_delta_yrs = year - self.epoch[0]
         mod_delta_mon = month - self.epoch[1] + mod_delta_yrs * 12
-        mod_delta_day = (givenday - zeroday).days
+        mod_delta_day = (given_date - zeroday).days
         mod_delta_hrs = hour - self.epoch[3] + mod_delta_day * 24 + utc_diff
         mod_delta_min = mins - self.epoch[4] + mod_delta_hrs * 60
 
         # Makes iterating through like components easier.
         quintuple = zip(
-            (mins, hour, day, month, givendow),
+            (mins, hour, day, month, given_dow),
             self.numerical_tab,
             self.string_tab,
-            (mod_delta_min, mod_delta_hrs, mod_delta_day, mod_delta_mon, 0),
+            (mod_delta_min, mod_delta_hrs, mod_delta_day, mod_delta_mon,
+                mod_delta_day),
             FIELD_RANGES)
 
-        for value, validnums, field_str, timediff, field_type in quintuple:
+        for value, valid_values, field_str, delta_t, field_type in quintuple:
             # All valid, static values for the fields are stored in sets
-            if value in validnums:
+            if value in valid_values:
                 continue
 
             # The following for loop implements the logic for context
@@ -159,38 +173,38 @@ class CronExpression(object):
             # False as seen at the end of this for...else... construct.
             for cron_atom in field_str.split(','):
                 if cron_atom[0] == '%':
-                    if not(timediff % int(cron_atom[1:])):
+                    if not(delta_t % int(cron_atom[1:])):
                         break
 
                 elif field_type == DAYS_OF_WEEK and '#' in cron_atom:
                     D, N = int(cron_atom[0]), int(cron_atom[2])
                     # Computes Nth occurence of D day of the week
-                    if (((D - firstdow) % 7) + 1 + 7 * (N - 1)) == day:
+                    if (((D - first_dow) % 7) + 1 + 7 * (N - 1)) == day:
                         break
 
                 elif field_type == DAYS_OF_MONTH and cron_atom[-1] == 'W':
-                    target = min(int(cron_atom[:-1]), lastdom)
-                    lands_on = (firstdow + target - 1) % 7
+                    target = min(int(cron_atom[:-1]), last_dom)
+                    lands_on = (first_dow + target - 1) % 7
                     if lands_on == 0:
                         # Shift from Sun. to Mon. unless Mon. is next month
-                        target += 1 if target < lastdom else -2
+                        target += 1 if target < last_dom else -2
                     elif lands_on == 6:
                         # Shift from Sat. to Fri. unless Fri. in prior month
                         target += -1 if target > 1 else 2
 
                     # Break if the day is correct, and target is a weekday
-                    if target == day and (firstdow + target - 7) % 7 > 1:
+                    if target == day and (first_dow + target - 7) % 7 > 1:
                         break
 
                 elif field_type in L_FIELDS and cron_atom.endswith('L'):
-                    # In dom field, translates to last d.o.m.
-                    target = lastdom
+                    # In dom field, L means the last day of the month
+                    target = last_dom
 
                     if field_type == DAYS_OF_WEEK:
                         # Calculates the last occurence of given day of week
                         desired_dow = int(cron_atom[:-1])
-                        target = (((desired_dow - firstdow) % 7) + 29)
-                        target -= 7 if target > lastdom else 0
+                        target = (((desired_dow - first_dow) % 7) + 29)
+                        target -= 7 if target > last_dom else 0
 
                     if target == day:
                         break
@@ -199,7 +213,8 @@ class CronExpression(object):
                 if field_type == DAYS_OF_MONTH and self.string_tab[4] != '*':
                     continue
                 elif field_type == DAYS_OF_WEEK and self.string_tab[2] != '*':
-                    # If we got here, then days of months validated.
+                    # If we got here, then days of months validated so it does
+                    # not matter that days of the week failed.
                     return True
 
                 # None of the expressions matched which means this field fails
@@ -211,10 +226,9 @@ class CronExpression(object):
 
 def parse_atom(parse, minmax):
     """
-    Returns valid values for a given cron-style range of numbers.
-
-    :minmax: Length 2 iterable containing the valid suffix and prefix bounds
-    for the range. The range is inclusive on both bounds.
+    Returns a set containing valid values for a given cron-style range of
+    numbers. The 'minmax' arguments is a two element iterable containing the
+    inclusive upper and lower limits of the expression.
 
     Examples:
     >>> parse_atom("1-5",(0,6))

@@ -152,12 +152,63 @@ class test_testedmodule(unittest.TestCase):
                     y,v)[-1],0,0)))
 
     def test_calendar_change_vs_hour_change(self):
-        # epoch and local differ by < 48 hours but it should be reported based 
+        # epoch and local differ by < 48 hours but it should be reported based
         # on calendar days, not 24 hour days
-        epoch = (2010, 11, 16, 23, 59)    
+        epoch = (2010, 11, 16, 23, 59)
         local_time = (2010, 11, 18, 0, 0)
         testex = cronex.CronExpression("0 0 %2 * *",epoch, -6)
         self.assertTrue(testex.check_trigger(local_time, -6))
+
+    def test_asterisk_is_loney(self):
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* *,1-9 * * *")
+
+    def test_dow_occurence(self):
+        for dow in xrange(0, 7):
+            for occurence in (1,6):
+                day = (7 * (occurence - 1)) + dow + 1
+                expression = "0 0 * * %i#%i" % (dow, occurence)
+                testex = cronex.CronExpression(expression)
+                if day < 32:
+                    self.assertTrue(testex.check_trigger(
+                        (2011, 5, day, 0, 0)))
+                    if day > 8:
+                        self.assertFalse(testex.check_trigger(
+                            (2011, 5, max(day - 7,1), 0, 0)))
+                    elif day < 25:
+                        self.assertFalse(testex.check_trigger(
+                            (2011, 5, max(day + 7,1), 0, 0)))
+                else:
+                    continue
+
+    def test_nearest_weekday(self):
+        import datetime
+        import calendar
+        month = 4
+        year = 1991
+        lastdom = calendar.monthrange(year, month)[-1]
+
+        for day in xrange(1,31):
+            dow = (datetime.date.weekday(
+                datetime.date(year, month, day)) + 1) % 7
+            testex = cronex.CronExpression("0 0 %iW * *" % day)
+            if dow == 0 or dow == 6:
+                self.assertFalse(testex.check_trigger(
+                    (year, month, day, 0, 0)))
+                at_least_one_of_them = (
+                    testex.check_trigger((year, month, max(day - 1, 1), 0, 0))
+                    or
+                    testex.check_trigger((year, month, max(day - 2, 1), 0, 0))
+                    or
+                    testex.check_trigger(
+                        (year, month, min(day + 1, lastdom), 0, 0))
+                    or
+                    testex.check_trigger(
+                        (year, month, min(day + 2, lastdom), 0, 0)))
+                self.assertTrue(at_least_one_of_them)
+            else:
+                self.assertTrue(
+                    testex.check_trigger((year, month, day, 0, 0)))
 
 def suite():
     s = unittest.makeSuite(test_testedmodule)
