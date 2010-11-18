@@ -1,23 +1,36 @@
 #!/usr/bin/env python
 """
-This module provides a class for cron-like scheduling systems, and
-exposes the function used to convert static cron expressions to Python
+
+This module provides a class for cron-like scheduling systems, and 
+exposes the function used to convert static cron expressions to Python 
 sets.
 
-Example: Simple scheduler in less than ten lines
+CronExpression objects are instantiated with a cron formatted string 
+that represents the times when the trigger is active. When using 
+expressions that contain periodic terms, an extension of cron created 
+for this module, a starting epoch should be explicitly defined. When the 
+epoch is not explicitly defined, it defaults to the Unix epoch. Periodic 
+terms provide a method of recurring triggers based on arbitrary time 
+periods.
 
-    import cronex
-    import os
-    import time
 
-    while True:
-        for line in open("crontab"):
-            job = cronex.CronExpression(line.strip())
+Standard Cron Triggers:
+>>> job = CronExpression("0 0 * * 1-5/2 find /var/log -delete")
+>>> job.check_trigger((2010, 11, 17, 0, 0))
+True
+>>> job.check_trigger((2012, 12, 21, 0 , 0))
+False
 
-            if job.check_trigger(time.gmtime(time.time())[:5]):
-                os.system(job.comment)
-
-        time.sleep(60)
+Periodic Trigger:
+>>> job = CronExpression("0 %9 * * * Feed 'it'", (2010, 5, 1, 7, 0, -6))
+>>> job.comment
+"Feed 'it'"
+>>> job.check_trigger((2010, 5, 1, 7, 0), utc_offset=-6)
+True
+>>> job.check_trigger((2010, 5, 1, 16, 0), utc_offset=-6)
+True
+>>> job.check_trigger((2010, 5, 2, 1, 0), utc_offset=-6)
+True
 """
 
 import datetime
@@ -108,11 +121,11 @@ class CronExpression(object):
         self.numerical_tab = []
 
         for field_str, span in zip(self.string_tab, FIELD_RANGES):
-            unified = set()
             split_field_str = field_str.split(',')
             if len(split_field_str) > 1 and "*" in split_field_str:
                 raise ValueError("\"*\" must be alone in a field.")
 
+            unified = set()
             for cron_atom in split_field_str:
                 # parse_atom only handles static cases
                 for special_char in ('%', '#', 'L', 'W'):
@@ -224,6 +237,7 @@ class CronExpression(object):
         # of all fields; the associated trigger should be fired.
         return True
 
+
 def parse_atom(parse, minmax):
     """
     Returns a set containing valid values for a given cron-style range of
@@ -249,7 +263,11 @@ def parse_atom(parse, minmax):
         return set(xrange(minmax[0], minmax[1] + 1))
     elif parse.isdigit():
         # A single number still needs to be returned as a set
-        return set((int(parse),))
+        value = int(parse)
+        if value >= minmax[0] and value <= minmax[1]:
+            return set((value,))
+        else:
+            raise ValueError("Invalid bounds: \"%s\"" % parse)
     elif '-' in parse or '/' in parse:
         divide = parse.split('/')
         subrange = divide[0]
