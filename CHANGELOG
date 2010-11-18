@@ -1,5 +1,13 @@
 CHANGELOG
 
+2010.11.17; Wednesay
+    Improvements in the unit tests.
+
+    Moved the original README.markdown to a documentation folder and renamed
+    it to SYNTAX.
+
+    Documentation revamped.
+
 2010.11.16; Tuesday
     The epoch is now a six element tuple. The last element represents offset
     from UTC. CronexExrepssion.check_trigger now uses a tuple for the date and

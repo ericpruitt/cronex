@@ -148,8 +148,12 @@ class test_testedmodule(unittest.TestCase):
         import calendar
         for y in xrange(2000, 2009):
             for v in xrange(1,13):
-                self.assertTrue(testex.check_trigger((y,v,calendar.monthrange(
-                    y,v)[-1],0,0)))
+                lastdom = calendar.monthrange(y,v)[-1]
+                for d in xrange(1, lastdom + 1):
+                    if d < lastdom:
+                        self.assertFalse(testex.check_trigger((y,v,d,0,0)))
+                    else:
+                        self.assertTrue(testex.check_trigger((y,v,d,0,0)))
 
     def test_calendar_change_vs_hour_change(self):
         # epoch and local differ by < 48 hours but it should be reported based
@@ -209,6 +213,28 @@ class test_testedmodule(unittest.TestCase):
             else:
                 self.assertTrue(
                     testex.check_trigger((year, month, day, 0, 0)))
+
+    def test_strict_range_bounds(self):
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "1000 * * * *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* 1000 * * *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* * 1000 * *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* * * 1000 *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* * * * 1000")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "-1 * * * *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* -1 * * *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* * 0 * *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* * * 0 *")
+        self.failUnlessRaises(ValueError,
+            cronex.CronExpression, "* * * * -1")
 
 def suite():
     s = unittest.makeSuite(test_testedmodule)
