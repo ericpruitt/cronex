@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 """
 
-This module provides a class for cron-like scheduling systems, and 
-exposes the function used to convert static cron expressions to Python 
+This module provides a class for cron-like scheduling systems, and
+exposes the function used to convert static cron expressions to Python
 sets.
 
-CronExpression objects are instantiated with a cron formatted string 
-that represents the times when the trigger is active. When using 
-expressions that contain periodic terms, an extension of cron created 
-for this module, a starting epoch should be explicitly defined. When the 
-epoch is not explicitly defined, it defaults to the Unix epoch. Periodic 
-terms provide a method of recurring triggers based on arbitrary time 
+CronExpression objects are instantiated with a cron formatted string
+that represents the times when the trigger is active. When using
+expressions that contain periodic terms, an extension of cron created
+for this module, a starting epoch should be explicitly defined. When the
+epoch is not explicitly defined, it defaults to the Unix epoch. Periodic
+terms provide a method of recurring triggers based on arbitrary time
 periods.
 
 
@@ -35,8 +35,10 @@ True
 
 import datetime
 import calendar
+import re
 
-__all__ = ["CronExpression", "parse_atom", "DEFAULT_EPOCH", "SUBSTITUTIONS"]
+__all__ = ["CronExpression", "parse_atom", "DEFAULT_EPOCH", "SUBSTITUTIONS",
+    "is_special_atom"]
 __license__ = "Public Domain"
 
 DAY_NAMES = zip(('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'), xrange(7))
@@ -59,6 +61,9 @@ SUBSTITUTIONS = {
     "@midnight": "0 0 * * *",
     "@hourly": "0 * * * *"
 }
+VALIDATE_POUND = re.compile("^[0-6]#[1-5]")
+VALIDATE_L_IN_DOW = re.compile("^[0-6]L$")
+VALIDATE_W = re.compile("^[0-3]?[0-9]W$")
 
 class CronExpression(object):
     def __init__(self, line, epoch=DEFAULT_EPOCH, epoch_utc_offset=0):
@@ -89,7 +94,7 @@ class CronExpression(object):
         for dowstr, downum in DAY_NAMES:
             dow = dow.lower().replace(dowstr, str(downum))
 
-        self.string_tab = [minutes, hours, dom.upper(), months, dow.upper()]
+        self.string_tab = map(str.upper, [minutes, hours, dom, months, dow])
         self.compute_numtab()
         if len(epoch) == 5:
             y, mo, d, h, m = epoch
@@ -99,7 +104,7 @@ class CronExpression(object):
 
     def __str__(self):
         base = self.__class__.__name__ + "(%s)"
-        cron_line = self.string_tab + [self.comment]
+        cron_line = self.string_tab + [str(self.comment)]
         if not self.comment:
             cron_line.pop()
         arguments = '"' + ' '.join(cron_line) + '"'
@@ -128,16 +133,16 @@ class CronExpression(object):
             unified = set()
             for cron_atom in split_field_str:
                 # parse_atom only handles static cases
-                for special_char in ('%', '#', 'L', 'W'):
-                    if special_char in cron_atom:
-                        break
-                else:
+                if not(is_special_atom(cron_atom, span)):
                     unified.update(parse_atom(cron_atom, span))
+
 
             self.numerical_tab.append(unified)
 
         if self.string_tab[2] == "*" and self.string_tab[4] != "*":
             self.numerical_tab[2] = set()
+        elif self.string_tab[4] == "*" and self.string_tab[2] != "*":
+            self.numerical_tab[4] = set()
 
     def check_trigger(self, date_tuple, utc_offset=0):
         """
@@ -189,13 +194,13 @@ class CronExpression(object):
                     if not(delta_t % int(cron_atom[1:])):
                         break
 
-                elif field_type == DAYS_OF_WEEK and '#' in cron_atom:
+                elif '#' in cron_atom:
                     D, N = int(cron_atom[0]), int(cron_atom[2])
                     # Computes Nth occurence of D day of the week
                     if (((D - first_dow) % 7) + 1 + 7 * (N - 1)) == day:
                         break
 
-                elif field_type == DAYS_OF_MONTH and cron_atom[-1] == 'W':
+                elif cron_atom[-1] == 'W':
                     target = min(int(cron_atom[:-1]), last_dom)
                     lands_on = (first_dow + target - 1) % 7
                     if lands_on == 0:
@@ -209,7 +214,7 @@ class CronExpression(object):
                     if target == day and (first_dow + target - 7) % 7 > 1:
                         break
 
-                elif field_type in L_FIELDS and cron_atom.endswith('L'):
+                elif cron_atom[-1] == 'L':
                     # In dom field, L means the last day of the month
                     target = last_dom
 
@@ -237,6 +242,43 @@ class CronExpression(object):
         # of all fields; the associated trigger should be fired.
         return True
 
+def is_special_atom(cron_atom, span):
+    """
+    Returns a boolean indicating whether or not the string can be parsed by
+    parse_atom to produce a static set. In the process of examining the
+    string, the syntax of any special character uses is also checked.
+    """
+    for special_char in ('%', '#', 'L', 'W'):
+        if special_char not in cron_atom:
+            continue
+
+        if special_char == '#':
+            if span != DAYS_OF_WEEK:
+                raise ValueError("\"#\" invalid where used.")
+            elif not VALIDATE_POUND.match(cron_atom):
+                raise ValueError("\"#\" syntax incorrect.")
+        elif special_char == "W":
+            if span != DAYS_OF_MONTH:
+                raise ValueError("\"W\" syntax incorrect.")
+            elif not(VALIDATE_W.match(cron_atom) and int(cron_atom[:-1]) > 0):
+                raise ValueError("Invalid use of \"W\".")
+        elif special_char == "L":
+            if span not in L_FIELDS:
+                raise ValueError("\"L\" invalid where used.")
+            elif span == DAYS_OF_MONTH:
+                if cron_atom != "L":
+                    raise ValueError("\"L\" must be alone in days of month.")
+            elif span == DAYS_OF_WEEK:
+                if not VALIDATE_L_IN_DOW.match(cron_atom):
+                    raise ValueError("\"L\" syntax incorrect.")
+        elif special_char == "%":
+            if not(cron_atom[1:].isdigit() and int(cron_atom[1:]) > 1):
+                raise ValueError("\"%\" syntax incorrect.")
+        break
+    else:
+        return False
+
+    return True
 
 def parse_atom(parse, minmax):
     """
@@ -267,7 +309,7 @@ def parse_atom(parse, minmax):
         if value >= minmax[0] and value <= minmax[1]:
             return set((value,))
         else:
-            raise ValueError("Invalid bounds: \"%s\"" % parse)
+            raise ValueError("\"%s\" is not within valid range." % parse)
     elif '-' in parse or '/' in parse:
         divide = parse.split('/')
         subrange = divide[0]
@@ -279,12 +321,12 @@ def parse_atom(parse, minmax):
             # Example: a-b
             prefix, suffix = [int(n) for n in subrange.split('-')]
             if prefix < minmax[0] or suffix > minmax[1]:
-                raise ValueError("Invalid bounds: \"%s\"" % parse)
+                raise ValueError("\"%s\" is not within valid range." % parse)
         elif subrange == '*':
             # Include all values with the given range
             prefix, suffix = minmax
         else:
-            raise ValueError("Unrecognized symbol: \"%s\"" % subrange)
+            raise ValueError("Unrecognized symbol \"%s\"" % subrange)
 
         if prefix < suffix:
             # Example: 7-10

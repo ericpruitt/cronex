@@ -172,8 +172,11 @@ class test_testedmodule(unittest.TestCase):
             for occurence in (1,6):
                 day = (7 * (occurence - 1)) + dow + 1
                 expression = "0 0 * * %i#%i" % (dow, occurence)
-                testex = cronex.CronExpression(expression)
-                if day < 32:
+                if occurence > 5:
+                    self.failUnlessRaises(ValueError, cronex.CronExpression,
+                        expression)
+                elif day < 32:
+                    testex = cronex.CronExpression(expression)
                     self.assertTrue(testex.check_trigger(
                         (2011, 5, day, 0, 0)))
                     if day > 8:
@@ -235,6 +238,61 @@ class test_testedmodule(unittest.TestCase):
             cronex.CronExpression, "* * * 0 *")
         self.failUnlessRaises(ValueError,
             cronex.CronExpression, "* * * * -1")
+
+    def test_catches_bad_modulus(self):
+        badstuff = [
+            "* * * * %-1",
+            "%1 * * * *",
+            "* %1 * * *",
+            "* * %1 * *",
+            "* * * %1 *",
+            "* * * * %1",
+            "%0 * * * *",
+            "* %0 * * *",
+            "* * %0 * *",
+            "* * * %0 *",
+            "* * * * %0",]
+        for case in badstuff:
+            self.failUnlessRaises(ValueError,
+                cronex.CronExpression, case)
+
+    def test_catches_bad_W(self):
+        badstuff = [
+            "5W * * * *",
+            "* 5W * * *",
+            "* * 99W * *",
+            "* * 0W * *",
+            "* * W0 * *",
+            "* * * 5W *",
+            "* * * * 5W",]
+        for case in badstuff:
+            self.failUnlessRaises(ValueError,
+                cronex.CronExpression, case)
+
+    def test_catches_bad_L(self):
+        badstuff = [
+            "L * * * *",
+            "* L * * *",
+            "* * 99L * *",
+            "* * 0L * *",
+            "* * * L *",
+            "* * * * L",
+            "* * * * 9L",
+            "* * * * -9L"]
+        for case in badstuff:
+            self.failUnlessRaises(ValueError,
+                cronex.CronExpression, case)
+
+    def test_catches_bad_Pound(self):
+        badstuff = [
+            "# * * * *",
+            "* # * * *",
+            "* * # * *",
+            "* * * # *",
+            "* * * * 9#9L"]
+        for case in badstuff:
+            self.failUnlessRaises(ValueError,
+                cronex.CronExpression, case)
 
 def suite():
     s = unittest.makeSuite(test_testedmodule)

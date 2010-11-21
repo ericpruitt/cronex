@@ -1,5 +1,11 @@
 CHANGELOG
 
+2010.11.21; Sunday
+    CronExpression now validates the syntax of special characters "L", "W",
+    and "#". The unit tests have been changed to reflect this. A new
+    function, "is_special_atom", was created in the process of making this
+    change.
+
 2010.11.17; Wednesay
     Improvements in the unit tests.
 
