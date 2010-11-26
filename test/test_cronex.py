@@ -11,6 +11,10 @@ MINUTE = 60
 HOUR = 60 * MINUTE
 DAY = 24 * HOUR
 
+# Python 3 compatibility
+if isinstance(map, type):
+    xrange = range
+
 # Add the parent directory relative to the test case because we assume the
 # test will be in a subdirectory relative to the main code base.
 sys.path.insert(0, os.path.join(

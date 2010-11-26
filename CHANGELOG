@@ -1,8 +1,10 @@
 CHANGELOG
 
 2010.11.25; Thursday
-    Nicer exception is raised when the number of fields in the CronExpression 
+    Nicer exception is raised when the number of fields in the CronExpression
     is too short.
+
+    Works with Python 3.1.
 
 2010.11.21; Sunday
     CronExpression now validates the syntax of special characters "L", "W",

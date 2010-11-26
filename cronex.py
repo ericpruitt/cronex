@@ -41,6 +41,16 @@ __all__ = ["CronExpression", "parse_atom", "DEFAULT_EPOCH", "SUBSTITUTIONS",
     "is_special_atom"]
 __license__ = "Public Domain"
 
+# Python 3 compatibility
+if isinstance(map, type):
+    def map(*args):
+        return list(__builtins__['map'](*args))
+
+    def zip(*args):
+        return list(__builtins__['zip'](*args))
+
+    xrange = range
+
 DAY_NAMES = zip(('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'), xrange(7))
 MINUTES = (0, 59)
 HOURS = (0, 23)
