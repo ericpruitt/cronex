@@ -338,3 +338,5 @@ def parse_atom(parse, minmax):
             bottom = set(xrange(ceilvalue - minmax[0], suffix + 1, increment))
             bottom.update(top)
             return bottom
+    else:
+        raise ValueError("Atom \"%s\" not in a recognized format." % parse )

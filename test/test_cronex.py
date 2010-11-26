@@ -294,6 +294,11 @@ class test_testedmodule(unittest.TestCase):
             self.failUnlessRaises(ValueError,
                 cronex.CronExpression, case)
 
+    def test_fail_on_not_enough_fields(self):
+        badstuff = ["*", "* *","* * *", "* * * *"]
+        for case in badstuff:
+            self.failUnlessRaises(ValueError, cronex.CronExpression, case)
+
 def suite():
     s = unittest.makeSuite(test_testedmodule)
     return unittest.TestSuite([s])

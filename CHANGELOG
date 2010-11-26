@@ -1,5 +1,9 @@
 CHANGELOG
 
+2010.11.25; Thursday
+    Nicer exception is raised when the number of fields in the CronExpression 
+    is too short.
+
 2010.11.21; Sunday
     CronExpression now validates the syntax of special characters "L", "W",
     and "#". The unit tests have been changed to reflect this. A new
