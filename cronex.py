@@ -166,6 +166,7 @@ class CronExpression(object):
         given_date = datetime.date(year, month, day)
         zeroday = datetime.date(*self.epoch[:3])
         last_dom = calendar.monthrange(year, month)[-1]
+        dom_matched = True
 
         # In calendar and datetime.date.weekday, Monday = 0
         given_dow = (datetime.date.weekday(given_date) + 1) % 7
@@ -239,11 +240,12 @@ class CronExpression(object):
             else:
                 # See 2010.11.15 of CHANGELOG
                 if field_type == DAYS_OF_MONTH and self.string_tab[4] != '*':
+                    dom_matched = False
                     continue
                 elif field_type == DAYS_OF_WEEK and self.string_tab[2] != '*':
                     # If we got here, then days of months validated so it does
                     # not matter that days of the week failed.
-                    return True
+                    return dom_matched
 
                 # None of the expressions matched which means this field fails
                 return False

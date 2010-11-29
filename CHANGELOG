@@ -1,5 +1,10 @@
 CHANGELOG
 
+2010.11.29; Monday
+    Flawed implementation of the day of the week / day of the month changed
+    made on 2010.11.15 corrected and "test_dom_either_or_dow" made more
+    comprehensive.
+
 2010.11.25; Thursday
     Nicer exception is raised when the number of fields in the CronExpression
     is too short.

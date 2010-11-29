@@ -127,12 +127,11 @@ class test_testedmodule(unittest.TestCase):
 
     def test_dom_either_or_dow(self):
         testex = cronex.CronExpression("0 0 5 * mon")
-        self.assertTrue(testex.check_trigger((2010,11,5,0,0)))
-        self.assertTrue(testex.check_trigger((2010,11,1,0,0)))
-        self.assertTrue(testex.check_trigger((2010,11,8,0,0)))
-        self.assertTrue(testex.check_trigger((2010,11,15,0,0)))
-        self.assertTrue(testex.check_trigger((2010,11,22,0,0)))
-        self.assertTrue(testex.check_trigger((2010,11,29,0,0)))
+        for e in xrange(1,30):
+            if e in (1,5,8,15,22,29):
+                self.assertTrue(testex.check_trigger((2010,11,e,0,0)))
+            else:
+                self.assertFalse(testex.check_trigger((2010,11,e,0,0)))
 
         testex = cronex.CronExpression("0 0 * * wed")
         for d in xrange(1,32):
