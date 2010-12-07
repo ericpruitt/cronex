@@ -345,10 +345,8 @@ def parse_atom(parse, minmax):
             return set(xrange(prefix, suffix + 1, increment))
         else:
             # Example: 12-4/2; (12, 12 + n, ..., 12 + m*n) U (n_0, ..., 4)
-            top = xrange(prefix, minmax[1] + 1, increment)
-            ceilvalue = increment - (minmax[1] - top[-1] - 1)
-            bottom = set(xrange(ceilvalue - minmax[0], suffix + 1, increment))
-            bottom.update(top)
-            return bottom
+            noskips = list(xrange(prefix, minmax[1] + 1))
+            noskips+= list(xrange(minmax[0], suffix + 1))
+            return set(noskips[::increment])
     else:
         raise ValueError("Atom \"%s\" not in a recognized format." % parse )

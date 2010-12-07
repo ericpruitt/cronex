@@ -26,7 +26,7 @@ Examples
     >>> job.check_trigger((2010, 5, 2, 1, 0), utc_offset=-6)
     True
 
-### Simple user-space cron in less than ten lines:  ###
+### Simple cron scheduler in less than ten lines:  ###
 
     import time
     import os
@@ -40,4 +40,3 @@ Examples
                 os.system(job.comment)
 
         time.sleep(60)
-
