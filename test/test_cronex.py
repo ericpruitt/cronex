@@ -81,6 +81,8 @@ class test_testedmodule(unittest.TestCase):
         now_tuple = time.gmtime(now)
         curmon = now_tuple[1]
         thnmon = then[1]
+        if curmon < thnmon:
+            curmon += 12
         per = 36 + curmon - thnmon
         testex = cronex.CronExpression("* * * %%%i *" % per)
         self.assertFalse(testex.check_trigger(now_tuple[:5]))

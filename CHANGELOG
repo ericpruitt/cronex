@@ -1,5 +1,9 @@
 CHANGELOG
 
+2011.01.16; Sunday
+    Fixed a big that caused one of the tests to fail in certain months of the
+    year. The bug was only in the test, not the trigger code.
+
 2010.12.14; Tuesday
     Fixed mis-spelling of "annually" and rewrote much of the SYNTAX
     documentation.
