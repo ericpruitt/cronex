@@ -222,7 +222,7 @@ class CronExpression(object):
                         target += -1 if target > 1 else 2
 
                     # Break if the day is correct, and target is a weekday
-                    if target == day and (first_dow + target - 7) % 7 > 1:
+                    if target == day and (first_dow + target) % 7 > 1:
                         break
 
                 elif cron_atom[-1] == 'L':
