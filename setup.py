@@ -6,5 +6,5 @@ setup(name='cronex',
       author='Eric Pruitt',
       author_email='eric.pruitt@gmail.com',
       url='https://github.com/ericpruitt/cronex',
-      py_modules=['cronex'],
+      packages=['cronex'],
      )
