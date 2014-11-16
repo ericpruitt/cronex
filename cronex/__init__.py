@@ -38,7 +38,7 @@ import re
 
 __all__ = ["CronExpression", "parse_atom", "DEFAULT_EPOCH", "SUBSTITUTIONS",
     "is_special_atom"]
-__license__ = "Public Domain, MIT, or FreeBSD"
+__license__ = "MIT"
 
 # Python 3 compatibility
 if isinstance(map, type):
