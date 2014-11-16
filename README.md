@@ -2,11 +2,27 @@ CronExpression
 ==============
 
 This module provides an easy to use interface for cron-like task scheduling.
+The cron expression evaluation implemented by this library is 100% Vixie Cron
+compatible and also supports [Java Quartz's][JQUARTZ] non-standard "L", "W" and
+"#" characters.
+
+One other useful feature this library provides is the ability to set triggers
+at arbitrary intervals such as every 9 hours, every 11 minutes, etc., without
+the issues caused by using asterisk-slash notation; using `*/9` in the hours
+field of most cron implementations would result in a trigger firing at 9:XX AM
+at 6:XX PM each day, but with CronExpresssions, the trigger would fire at 9:XX
+AM, 6:XX PM then, on the following day 3:XX AM, 12:XX PM, 9:XX PM and so.
+
+  [JQUARTZ]: http://www.quartz-scheduler.org/documentation/quartz-1.x/tutorials/crontrigger "Quartz Scheduler: CronTrigger Tutorial"
 
 Examples
 --------
 
 ### Standard Cron Fields ###
+
+This example shows basic instantiation of a CronExpression and how to check to
+see if a trigger should fire at a given time. The time tuples consist of the
+year, month, date, hour and minute in that order.
 
     >>> job = CronExpression("0 0 * * 1-5/2 find /var/log -delete")
     >>> job.check_trigger((2010, 11, 17, 0, 0))
@@ -16,9 +32,12 @@ Examples
 
 ### Periodic Trigger ###
 
-    >>> job = CronExpression("0 %9 * * * Feed 'it'", (2010, 5, 1, 7, 0, -6))
+This trigger is a reminder to feed the kitten every 9 hours starting from May
+1st, 2010 at 7 AM, GMT -6:00.
+
+    >>> job = CronExpression("0 %9 * * * Feed kitten", (2010, 5, 1, 7, 0, -6))
     >>> job.comment
-    "Feed 'it'"
+    "Feed kitten"
     >>> job.check_trigger((2010, 5, 1, 7, 0), utc_offset=-6)
     True
     >>> job.check_trigger((2010, 5, 1, 16, 0), utc_offset=-6)
@@ -26,7 +45,10 @@ Examples
     >>> job.check_trigger((2010, 5, 2, 1, 0), utc_offset=-6)
     True
 
-### Simple cron scheduler in less than ten lines  ###
+### Simple cron scheduler in less than ten lines ###
+
+With CronExpressions, a very basic task scheduler can be created with only a
+handful of lines.
 
     import time
     import os
@@ -37,12 +59,12 @@ Examples
             job = cronex.CronExpression(line.strip())
 
             if job.check_trigger(time.gmtime(time.time())[:5]):
-                os.system(job.comment)
+                os.system("(" + job.comment ") & disown")
 
         time.sleep(60)
 
-Syntax
-------
+Expression Syntax
+-----------------
 
 Readers that are already familiar with cron should skip down to the section
 titled _Repeaters_. Aside from the repeaters, the only other notable difference
