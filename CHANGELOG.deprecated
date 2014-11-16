@@ -1,4 +1,8 @@
-CHANGELOG
+This file is no longer updated in favor of writing descriptive commit messages,
+but it shall remain for posterity since I do not wish to rewrite the Git
+repository history.
+
+                                      ---
 
 2011.01.16; Sunday
     Fixed a big that caused one of the tests to fail in certain months of the
