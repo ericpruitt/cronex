@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 """
-
 This module provides a class for cron-like scheduling systems, and
 exposes the function used to convert static cron expressions to Python
 sets.
@@ -33,8 +32,8 @@ True
 True
 """
 
-import datetime
 import calendar
+import datetime
 import re
 
 __all__ = ["CronExpression", "parse_atom", "DEFAULT_EPOCH", "SUBSTITUTIONS",
@@ -75,6 +74,7 @@ VALIDATE_POUND = re.compile("^[0-6]#[1-5]")
 VALIDATE_L_IN_DOW = re.compile("^[0-6]L$")
 VALIDATE_W = re.compile("^[0-3]?[0-9]W$")
 
+
 class CronExpression(object):
     def __init__(self, line, epoch=DEFAULT_EPOCH, epoch_utc_offset=0):
         """
@@ -112,7 +112,7 @@ class CronExpression(object):
         else:
             self.epoch = epoch
 
-    def __str__(self):
+    def __repr__(self):
         base = self.__class__.__name__ + "(%s)"
         cron_line = self.string_tab + [str(self.comment)]
         if not self.comment:
@@ -123,8 +123,8 @@ class CronExpression(object):
         else:
             return base % arguments
 
-    def __repr__(self):
-        return str(self)
+    def __str__(self):
+        return repr(self)
 
     def compute_numtab(self):
         """
@@ -145,7 +145,6 @@ class CronExpression(object):
                 # parse_atom only handles static cases
                 if not(is_special_atom(cron_atom, span)):
                     unified.update(parse_atom(cron_atom, span))
-
 
             self.numerical_tab.append(unified)
 
@@ -254,6 +253,7 @@ class CronExpression(object):
         # of all fields; the associated trigger should be fired.
         return True
 
+
 def is_special_atom(cron_atom, span):
     """
     Returns a boolean indicating whether or not the string can be parsed by
@@ -286,11 +286,11 @@ def is_special_atom(cron_atom, span):
         elif special_char == "%":
             if not(cron_atom[1:].isdigit() and int(cron_atom[1:]) > 1):
                 raise ValueError("\"%\" syntax incorrect.")
-        break
+        return True
     else:
         return False
 
-    return True
+
 
 def parse_atom(parse, minmax):
     """
@@ -346,7 +346,7 @@ def parse_atom(parse, minmax):
         else:
             # Example: 12-4/2; (12, 12 + n, ..., 12 + m*n) U (n_0, ..., 4)
             noskips = list(xrange(prefix, minmax[1] + 1))
-            noskips+= list(xrange(minmax[0], suffix + 1))
+            noskips += list(xrange(minmax[0], suffix + 1))
             return set(noskips[::increment])
     else:
-        raise ValueError("Atom \"%s\" not in a recognized format." % parse )
+        raise ValueError("Atom \"%s\" not in a recognized format." % parse)
