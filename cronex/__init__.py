@@ -215,10 +215,16 @@ class CronExpression(object):
                     lands_on = (first_dow + target - 1) % 7
                     if lands_on == 0:
                         # Shift from Sun. to Mon. unless Mon. is next month
-                        target += 1 if target < last_dom else -2
+                        if target < last_dom:
+                            target += 1
+                        else:
+                            target -= 2
                     elif lands_on == 6:
                         # Shift from Sat. to Fri. unless Fri. in prior month
-                        target += -1 if target > 1 else 2
+                        if target > 1:
+                            target -= 1
+                        else:
+                            target += 2
 
                     # Break if the day is correct, and target is a weekday
                     if target == day and (first_dow + target) % 7 > 1:
@@ -232,7 +238,8 @@ class CronExpression(object):
                         # Calculates the last occurence of given day of week
                         desired_dow = int(cron_atom[:-1])
                         target = (((desired_dow - first_dow) % 7) + 29)
-                        target -= 7 if target > last_dom else 0
+                        if target > last_dom:
+                            target -= 7
 
                     if target == day:
                         break
