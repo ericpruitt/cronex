@@ -59,7 +59,7 @@ handful of lines.
             job = cronex.CronExpression(line.strip())
 
             if job.check_trigger(time.gmtime(time.time())[:5]):
-                os.system("(" + job.comment ") & disown")
+                os.system("(" + job.comment + ") & disown")
 
         time.sleep(60)
 
