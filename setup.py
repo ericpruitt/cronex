@@ -1,4 +1,5 @@
-import distutils.core
+from setuptools import setup
+
 import subprocess
 
 # If pandoc is available, convert the markdown README to REstructured Text.
@@ -10,7 +11,7 @@ try:
 except OSError:
     long_description = None
 
-distutils.core.setup(
+setup(
     name="cronex",
     version="0.1.0",
     description=("This module provides an easy to use interface for cron-like"
