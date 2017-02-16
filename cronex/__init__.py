@@ -50,7 +50,7 @@ if isinstance(map, type):
 
     xrange = range
 
-DAY_NAMES = zip(('sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'), xrange(7))
+DAY_NAMES = zip(('SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'), xrange(7))
 MINUTES = (0, 59)
 HOURS = (0, 23)
 DAYS_OF_MONTH = (1, 31)
@@ -58,8 +58,8 @@ MONTHS = (1, 12)
 DAYS_OF_WEEK = (0, 6)
 L_FIELDS = (DAYS_OF_WEEK, DAYS_OF_MONTH)
 FIELD_RANGES = (MINUTES, HOURS, DAYS_OF_MONTH, MONTHS, DAYS_OF_WEEK)
-MONTH_NAMES = zip(('jan', 'feb', 'mar', 'apr', 'may', 'jun',
-                   'jul', 'aug', 'sep', 'oct', 'nov', 'dec'), xrange(1, 13))
+MONTH_NAMES = zip(('JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'), xrange(1, 13))
 DEFAULT_EPOCH = (1970, 1, 1, 0, 0, 0)
 SUBSTITUTIONS = {
     "@yearly": "0 0 1 1 *",
@@ -99,12 +99,12 @@ class CronExpression(object):
         dom = dom.replace('?', '*')
 
         for monthstr, monthnum in MONTH_NAMES:
-            months = months.lower().replace(monthstr, str(monthnum))
+            months = months.upper().replace(monthstr, str(monthnum))
 
         for dowstr, downum in DAY_NAMES:
-            dow = dow.lower().replace(dowstr, str(downum))
+            dow = dow.upper().replace(dowstr, str(downum))
 
-        self.string_tab = map(str.upper, [minutes, hours, dom, months, dow])
+        self.string_tab = [minutes, hours, dom, months, dow]
         self.compute_numtab()
         if len(epoch) == 5:
             y, mo, d, h, m = epoch
