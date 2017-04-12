@@ -183,9 +183,9 @@ class CronExpression(object):
 
         for key, value in SUBSTITUTIONS.items():
             if text.startswith(key):
-                if seconds:
+                if with_seconds:
                     value = "0 " + value
-                if years:
+                if with_years:
                     value += " *"
                 text = text.replace(key, value)
                 break
@@ -258,8 +258,8 @@ class CronExpression(object):
                 text=value,
                 epoch=self.epoch,
                 epoch_utc_offset=self.epoch_utc_offset,
-                seconds=self.with_seconds,
-                years=self.with_years,
+                with_seconds=self.with_seconds,
+                with_years=self.with_years,
             )
         except:
             self._text = original_value
@@ -267,21 +267,21 @@ class CronExpression(object):
 
     def check_trigger(self, when=None):
         months_delta = 0
-        seconds = 0
+        second = 0
         seconds_delta = 0
 
         if when is None or isinstance(when, int):
-            year, month, day, hour, minutes, seconds = time.localtime(when)[:6]
+            year, month, day, hour, minute, second = time.localtime(when)[:6]
         elif self.with_seconds:
-            year, month, day, hour, minutes, seconds = when[:6]
+            year, month, day, hour, minute, second = when[:6]
         else:
-            year, month, day, hour, minutes = when[:5]
+            year, month, day, hour, minute = when[:5]
 
         if self._need_seconds_delta:
             if isinstance(when, int):
                 unixtime = when
             else:
-                instant = (year, month, day, hour, minutes, seconds, 0, 0, -1)
+                instant = (year, month, day, hour, minute, second, 0, 0, -1)
                 unixtime = time.mktime(instant)
 
             seconds_delta =  self.epoch_unixtime
@@ -294,7 +294,7 @@ class CronExpression(object):
           not check_monotonic(seconds_delta, self._monotonic["hours"], 3600)):
             return False
 
-        if (minutes not in self._fixed["minutes"] and
+        if (minute not in self._fixed["minutes"] and
           not check_monotonic(seconds_delta, self._monotonic["minutes"], 60)):
             return False
 
@@ -302,7 +302,7 @@ class CronExpression(object):
           not check_monotonic(months_delta, self._monotonic["months"])):
             return False
 
-        if (seconds not in self._fixed["seconds"] and
+        if (second not in self._fixed["seconds"] and
           not check_monotonic(seconds_delta, self._monotonic["seconds"])):
             return False
 
