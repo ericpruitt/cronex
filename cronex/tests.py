@@ -222,7 +222,7 @@ class MiscTests(unittest.TestCase):
     def test_unicode_is_accepted_in_python2(self):
         if sys.version_info.major > 2:
             return
-        cronex.CronExpression(unicode("* * * * * ABC"))
+        cx.CronExpression(unicode("* * * * * ABC"))
 
 
 if __name__ == "__main__":
