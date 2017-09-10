@@ -102,21 +102,30 @@ class test_testedmodule(unittest.TestCase):
     def test_periodics_month(self):
         """
         Verify that arbitrary-period repeaters in the month field work as
-        expected.
+        expected. More specifically, it verifies that the repeaters are
+        triggered every "N" calendar months regardless of the day for triggers
+        set to go offer every 1 month, ever 2 months, etc... through 18 months
+        from 1970 through 1980.
         """
-        now = int(time.time())
-        then = time.gmtime(now - 1337 * DAY)
-        now_tuple = time.gmtime(now)
-        curmon = now_tuple[1]
-        thnmon = then[1]
-        if curmon < thnmon:
-            curmon += 12
-        per = 36 + curmon - thnmon
-        testex = cronex.CronExpression("* * * %%%i *" % per)
-        self.assertFalse(testex.check_trigger(now_tuple[:5]))
-        testex.epoch = tuple(list(then[:5]) + [0])
-        self.assertTrue(testex.check_trigger(now_tuple[:5]))
-        self.assertTrue(testex.check_trigger(then[:5]))
+        for period in range(2, 18):
+            calendar_months = 0
+            description = "* * * %%%i *" % period
+            cron_expression = cronex.CronExpression(description)
+
+            for year in range(1970, 1980):
+                for month in range(1, 13):
+                    days_in_month = calendar.monthrange(year, month)[-1]
+                    should_trigger = not (calendar_months % period)
+
+                    for day in range(1, days_in_month + 1):
+                        time_tuple = (year, month, day, 0, 0)
+                        triggered = cron_expression.check_trigger(time_tuple)
+                        self.assertEqual(should_trigger, triggered,
+                            "%s: expected trigger to be %r for %r" %
+                            (description, should_trigger, time_tuple)
+                        )
+
+                    calendar_months += 1
 
     def test_parse_atom(self):
         """
