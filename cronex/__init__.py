@@ -153,13 +153,18 @@ class CronExpression(object):
         elif self.string_tab[4] == "*" and self.string_tab[2] != "*":
             self.numerical_tab[4] = set()
 
-    def check_trigger(self, date_tuple, utc_offset=0):
+    def check_trigger(self, date_tuple, utc_offset=0, do_wild=True, do_non_wild=True):
         """
         Returns boolean indicating if the trigger is active at the given time.
         The date tuple should be in the local time. Unless periodicities are
         used, utc_offset does not need to be specified. If periodicities are
         used, specifically in the hour and minutes fields, it is crucial that
         the utc_offset is specified.
+
+        The arguments do_wild and do_non_wild can be used to implement the
+        Vixie cron local time jump tracking algorithm, where non-wildcard and
+        wildcard job execution changes intelligently in the presence of DST
+        transitions and most forward and reverse clock skew occurrences.
         """
         year, month, day, hour, mins = date_tuple
         given_date = datetime.date(year, month, day)
@@ -256,9 +261,17 @@ class CronExpression(object):
                 # None of the expressions matched which means this field fails
                 return False
 
-        # Arriving at this point means the date landed within the constraints
-        # of all fields; the associated trigger should be fired.
-        return True
+        is_wild = self.string_tab[0] == '*' or self.string_tab[1] == '*'
+        if do_non_wild and not is_wild or do_wild and is_wild:
+            # Arriving at this point means the date landed within the constraints
+            # of all fields; the associated trigger should be fired.
+            return True
+        else:
+            # Arriving at this point means the date did not pass the Vixie
+            # time tracking wildcard evaluation constraints; the associated
+            # trigger should not be fired.
+            return False
+
 
 
 def is_special_atom(cron_atom, span):
