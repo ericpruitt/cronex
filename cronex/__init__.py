@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import collections
 import re
 import time
+# TODO: add tests for each member of ANNOTATABLE_PATTERNS
 
-DYNAMIC_FIELD_MATCHERS = [
+ANNOTATABLE_PATTERNS = [
     "L",
     "L-[0-9]+",
     "[0-9]+#[0-9]+",
@@ -12,31 +14,43 @@ DYNAMIC_FIELD_MATCHERS = [
 ]
 
 SUBSTITUTIONS = {
-    "@yearly": "0 0 1 1 *",
     "@annually": "0 0 1 1 *",
+    "@daily": "0 0 * * *",
+    "@hourly": "0 * * * *",
+    "@midnight": "0 0 * * *",
     "@monthly": "0 0 1 * *",
     "@weekly": "0 0 * * 0",
-    "@daily": "0 0 * * *",
-    "@midnight": "0 0 * * *",
-    "@hourly": "0 * * * *"
+    "@yearly": "0 0 1 1 *",
 }
 
+FIELD_SECONDS = "seconds"
+FIELD_MINUTES = "minutes"
+FIELD_HOURS = "hours"
+FIELD_DAYS = "days"
+FIELD_MONTHS = "months"
+FIELD_DOTW = "days_of_the_week"
+FIELD_YEARS = "years"
+
+CONSTRAINT_ANNOTATION = "dynamic"
+CONSTRAINT_MONOTONIC = "monotonic"
+CONSTRAINT_FIXED = "fixed"
+
 ORDERED_FIELD_RANGES_AND_NAMES = (
-    ("seconds",                (0,   59)),
-    ("minutes",                (0,   59)),
-    ("hours",                  (0,   23)),
-    ("days",                   (1,   31)),
-    ("months",                 (1,   12)),
-    ("days_of_the_week",       (0,    6)),
-    ("years",               (1970, 9999)),
+    (FIELD_SECONDS, (0,   59)),
+    (FIELD_MINUTES, (0,   59)),
+    (FIELD_HOURS,   (0,   23)),
+    (FIELD_DAYS,    (1,   31)),
+    (FIELD_MONTHS,  (1,   12)),
+    (FIELD_DOTW,    (0,    6)),
+    (FIELD_YEARS,   (1970, 9999)),
 )
-FIELD_NAMES = tuple((name for name, _ in ORDERED_FIELD_RANGES_AND_NAMES))
+FIELDS = tuple((name for name, _ in ORDERED_FIELD_RANGES_AND_NAMES))
 FIELD_RANGES = dict(ORDERED_FIELD_RANGES_AND_NAMES)
 
-ASTERISK = frozenset(range(max(0, 10000)))
+ASTERISK = frozenset(range(10000))
 
 DAY_MAP = {
-    "SUN": 0, "MON": 1, "TUE": 2, "WED": 3, "THU": 4, "FRI": 5, "SAT": 6
+    "SUN": 0, "MON": 1, "TUE": 2, "WED": 3, "THU": 4, "FRI": 5, "SAT": 6,
 }
 MONTH_MAP = {
     "JAN":  1,  "FEB":  2,  "MAR":  3,  "APR":  4,  "MAY":  5,  "JUN":  6,
@@ -46,14 +60,28 @@ MONTH_MAP = {
 DAY_REGEX = re.compile(r"\b(%s)L?\b" % "|".join(DAY_MAP.keys()), re.I)
 MONTH_REGEX = re.compile(r"\b(%s)\b" % "|".join(MONTH_MAP.keys()), re.I)
 
-DYNAMIC_DOTW = "?"
-DYNAMIC_L_LX = "L/L-?"
-DYNAMIC_XHX = "?#?"
-DYNAMIC_XL = "?L"
-DYNAMIC_XW = "?W"
+# TODO: Support for LW
+ANNOTATION_DOTW = "?"
+ANNOTATION_L_LX = "L/L-?"
+ANNOTATION_XHX = "?#?"
+ANNOTATION_XL = "?L"
+ANNOTATION_XW = "?W"
 
-DYNAMIC_FIELD_REGEX = re.compile("(%s)$" % "|".join(DYNAMIC_FIELD_MATCHERS))
+ANNOTATABLE_FIELD_REGEX = re.compile("^(%s)$" % "|".join(ANNOTATABLE_PATTERNS))
 RANGE_REGEX = re.compile("((?P<first>\d+)-(?P<last>\d+)|\*)(/(?P<step>\d+))?$")
+
+
+class Epoch(
+  collections.namedtuple("Epoch", ["year", "month", "day", "timestamp"])):
+    """
+    Date and / or time from which monotonic constraints begin counting.
+    """
+
+
+class Fields(collections.namedtuple("Fields", FIELDS)):
+    """
+    Collection of values associated with particular cron expression fields.
+    """
 
 
 class Error(Exception):
@@ -82,10 +110,11 @@ class InvalidField(Error):
         return "Invalid %s: %s" % (field_display_name, self.problem)
 
     def __repr__(self):
-        return "%s(%r, %r)" % (self.field, self.problem)
+        return "%s(%r, %r)" % (
+            self.__class__.__name__, self.field, self.problem)
 
 
-class MisingFieldsError(Error):
+class MissingFieldsError(Error):
     """
     Exception raised when there are too few fields specified in the constructor
     CronExpression.
@@ -125,6 +154,9 @@ class OutOfBounds(InvalidField):
           validated. If the this text represents a single number with the same
           value as the "what" argument, it is ignored so the same number is not
           displayed twice in the exception message.
+
+        Raises: OutOfBounds exception if one or more values are outside the
+        valid range.
         """
         try:
             values = set(what)
@@ -138,6 +170,8 @@ class OutOfBounds(InvalidField):
             return
 
         try:
+            # If the expression only contains one number, the expression is not
+            # shown since it would be redundant.
             if len(values) == 1 and (int(expression) in values or
               float(expression) in values):
                 expression = None
@@ -156,95 +190,137 @@ class OutOfBounds(InvalidField):
 
 
 class CronExpression(object):
-    def __init__(self, text, epoch=None, epoch_utc_offset=None,
-      with_seconds=False, with_years=False):
+    def __init__(self, text, epoch=Epoch(1970, 1, 1, 0), with_seconds=False,
+      with_years=False):
         """
-        Instantiate a CronExpression object with an optionally defined epoch.
-        If the epoch is defined, the UTC offset can be specified one of two
-        ways: as the sixth element in 'epoch' or supplied in epoch_utc_offset.
-        The epoch should be defined down to the minute sorted by descending
-        significance.
-
         Arguments:
         - text: expression to parse. This must contain at least 5 fields but 6
           and 7 are also allowed depending on whether or not "with_seconds" and
           "with_years" are True.
-        - epoch: either a Unix timestamp or a tuple with a date and optionally
-          time that represents the starting point of all monotonic constraints.
-          The epoch may be defined with any iterable, but if the object has the
-          attribute "tm_gmtoff", it will be handled appropriately unless
-          "epoch_utc_offset" is set.
-        - epoch_utc_offset: offset of the epoch in seconds east of UTC. If this
-          value is not None, it takes precedence over `epoch.tm_gmtoff`.
+        - epoch: Epoch representing the date and / or time from which monotonic
+          constraints begin counting.
+        - with_seconds: Boolean value indicating whether or not the text
+          expression includes a field for seconds.
+        - with_years: Boolean value indicating whether or not the text
+          expression includes a field for years.
         """
-        original_text = text
-        text = text.lstrip()
-        self.comment = ""
+        parts = text.split(None, 1)
+        expression, comment = parts if len(parts) == 2 else (parts, "")
 
-        for key, value in SUBSTITUTIONS.items():
-            if text.startswith(key):
-                if with_seconds:
-                    value = "0 " + value
-                if with_years:
-                    value += " *"
-                text = text.replace(key, value)
-                break
+        for target, replacement in SUBSTITUTIONS.items():
+            if expression != target:
+                continue
 
-        expected_fields = 5 + with_seconds + with_years
-        columns = text.split(None, expected_fields)
-        colcount = len(columns)
+            if with_seconds:
+                replacement = "0 " + replacement
 
-        if colcount < expected_fields:
-            raise MisingFieldsError(
-                "Need %d fields but found %d" % (expected_fields, colcount)
-            )
+            if with_years:
+                replacement += " *"
 
-        if colcount > expected_fields:
-            self.comment = columns.pop()
+            fields = replacement.split()
+            break
 
-        if not with_seconds:
-            columns.insert(0, "*")
+        else:
+            expected_fields = 5 + bool(with_seconds) + bool(with_years)
+            fields = text.split(None, expected_fields)
+            len_fields = len(fields)
+            comment = fields.pop() if len_fields > expected_fields else ""
 
-        if not with_years:
-            columns.append("*")
+            if len_fields < expected_fields:
+                raise MissingFieldsError(
+                    "need %d fields, found %d" % (expected_fields, len_fields)
+                )
 
-        if epoch is not None:
-            if isinstance(epoch, int):
-                year, month, day = time.localtime(epoch)[:3]
-            else:
-                year, month, day = epoch[:3]
+            if not with_seconds:
+                fields.insert(0, "*")
 
-            self.epoch_unixtime = time.mktime(epoch)
-            self.epoch_ordinal_months = year * 12 + month - 1
+            if not with_years:
+                fields.append("*")
 
-        self.epoch = epoch
-        self.epoch_utc_offset = epoch_utc_offset
-        self.with_seconds = with_seconds
-        self.with_years = with_years
+        # Nothing to do if it's already in an Epoch instance or None.
+        if isinstance(epoch, (Epoch, None)):
+            pass
+
+        # Unix timestamp
+        elif isinstance(epoch, (int, float)):
+            moment = time.localtime(epoch)
+            year, month, day = moment[:3]
+            epoch = Epoch(year, month, day, int(epoch))
+
+        # (Year, Month, Day); calendar epoch only.
+        elif len(epoch) == 3:
+            epoch = Epoch(epoch[0], epoch[1], epoch[2], None)
+
+        # (Year, Month, Day, Hour, Minute); calendar and clock epoch.
+        elif len(epoch) >= 5:
+            if len(epoch) < 9:
+                epoch = list(epoch) + [0, 0, 0, -1][-(9 - len(epoch)):]
+
+            year, month, day = epoch[:3]
+            timestamp = time.mktime(when)
+            epoch = Epoch(year, month, day, timestamp)
+
+        else:
+            raise Error("%r is not a supported epoch type" % (epoch, ))
 
         try:
-            self._fixed, self._dynamic, self._monotonic = parse(columns)
+            self._constraints = generate_constraint_sets(fields, epoch)
         except Error as e:
-            raise Error("%s: %s" % (original_text, e))
+            raise Error("%s: %s" % (text.strip(), e))
 
-        self._need_seconds_delta = any((
-            self._monotonic["days"],
-            self._monotonic["minutes"],
-            self._monotonic["seconds"],
-        ))
+        self._epoch = epoch
+        self._text = text
+        self._with_seconds = with_seconds
+        self._with_years = with_years
+
+        self._comment = comment.strip()
+        self._expression = " ".join(text.replace(self.comment, "").split())
+
+    def check_trigger(self, when):
+        return constraints_met(
+            when, self._epoch, self._with_seconds, *self._constraints)
 
     def __eq__(self, other):
         """
-        Two CronExpression instances are considered equivalent based on
-        scheduling even if the original text input differed;
-        `CronExpression("*/30 0,8,16 * Sun,Wed *")` is considered equal to
-        `CronExpression("0,30 */8 * 0,3 *")`.
+        Two CronExpression instances are considered equivalent if they have the
+        same constraints. It is possible to construct two expressions that are
+        not considered equal that trigger at the same time.
         """
-        return (
-            self._fixed == other._fixed and
-            self._dynamic == other._dynamic and
-            self._monotonic == other._monotonic
-        )
+        # TODO: The epoch doesn't necessarily apply to every field, so this
+        # should be modified to only compare certain parts of the epoch based
+        # on the fields that have monotonic expressions.
+        try:
+            if self._constraints != other._constraints:
+                return False
+
+            _, monotonic, _ = self._constraints
+            if not any(monotonic):
+                return True
+
+            return self._epoch == other._epoch
+
+        except AttributeError:
+            return False
+
+    def __repr__(self):
+        template = self.__class__.__name__ + ("("
+            "%(_text)r,"
+            " epoch=%(_epoch)r,"
+            " with_seconds=%(_with_seconds)r,"
+            " with_years=%(_with_years)r"
+        ")")
+        return template % self.__dict__
+
+    def __str__(self):
+        return repr(self)
+
+    @property
+    def comment(self):
+        return self._comment
+
+    @property
+    def expression(self):
+        return self._expression
 
     @property
     def text(self):
@@ -252,86 +328,161 @@ class CronExpression(object):
 
     @text.setter
     def text(self, value):
-        original_value = self._text
+        _text = self._text
         try:
             self.__init__(
                 text=value,
-                epoch=self.epoch,
-                epoch_utc_offset=self.epoch_utc_offset,
-                with_seconds=self.with_seconds,
-                with_years=self.with_years,
+                epoch=self._epoch,
+                with_seconds=self._with_seconds,
+                with_years=self._with_years,
             )
         except:
-            self._text = original_value
+            self._text = _text
             raise
 
-    def check_trigger(self, when=None):
-        months_delta = 0
-        second = 0
-        seconds_delta = 0
 
-        if when is None or isinstance(when, int):
-            year, month, day, hour, minute, second = time.localtime(when)[:6]
-        elif self.with_seconds:
-            year, month, day, hour, minute, second = when[:6]
-        else:
-            year, month, day, hour, minute = when[:5]
-
-        if self._need_seconds_delta:
-            if isinstance(when, int):
-                unixtime = when
-            else:
-                instant = (year, month, day, hour, minute, second, 0, 0, -1)
-                unixtime = time.mktime(instant)
-
-            seconds_delta =  self.epoch_unixtime
-
-        if self._monotonic["months"]:
-            ordinal_months = year * 12 + month - 1
-            months_delta = ordinal_months - self.epoch_ordinal_months
-
-        if (hour not in self._fixed["hours"] and
-          not check_monotonic(seconds_delta, self._monotonic["hours"], 3600)):
-            return False
-
-        if (minute not in self._fixed["minutes"] and
-          not check_monotonic(seconds_delta, self._monotonic["minutes"], 60)):
-            return False
-
-        if (month not in self._fixed["months"] and
-          not check_monotonic(months_delta, self._monotonic["months"])):
-            return False
-
-        if (second not in self._fixed["seconds"] and
-          not check_monotonic(seconds_delta, self._monotonic["seconds"])):
-            return False
-
-        if (day not in self._fixed["days"] and not self._dynamic or
-          not annotate(year, month, day).issuperset(self._dynamic)):
-            return False
-
-        if year not in self._fixed["years"]:
-            return False
-
-        return True
-
-
-def dotw_7to0(x):
+def atomize(field, contents):
     """
-    Helper function to convert 7 to 0 for values that represent days of the
-    week.
+    Split a cron expression field into atomic parts that can be processed by
+    "parse_atom".
+
+    Arguments:
+    - field (str): Cron expression field name.
+    - contents (str): Contents of the field.
+
+    Returns: A frozenset of atoms that can be passed to "parse_atom".
     """
-    return 0 if x == 7 else x
+    if field == FIELD_DOTW:
+        replacer = lambda match: str(DAY_MAP[match.group().upper()])
+        atoms = list()
+        for atom in DAY_REGEX.sub(replacer, contents).split(","):
+            atoms.append("0" if atom in ("7", "L") else atom)
+
+    elif field == FIELD_MONTHS:
+        replacer = lambda match: str(MONTH_MAP[match.group().upper()])
+        atoms = MONTH_REGEX.sub(replacer, contents).split(",")
+
+    else:
+        atoms = contents.split(",")
+
+    if len(atoms) > 1 and ("*" in atoms or "?" in atoms):
+        raise InvalidUsage(field, "'*' / '?' must be the only text in a field")
+
+    if "" in atoms:
+        raise FieldSyntaxError(field, "missing text after comma")
+
+    return frozenset(atoms)
 
 
-def translate(field, expression):
+def parse_atom(field, atom, epoch):
     """
-    Convert an expression for a dynamic condition into an annotation.
+    Convert a textual atoms to numeric values and day annotations.
+
+    Arguments:
+    - field (str): Cron expression field name.
+    - atom (str): Expression atom.
+    - epoch: Epoch representing the date and / or time from which monotonic
+      constraints begin counting.
+
+    Returns: A tuple containing (type of resulting expression, associated
+    values).
+    """
+    if atom == "?":
+        if field not in (FIELD_DAYS, FIELD_DOTW):
+            raise InvalidUsage(field,
+                "'?' can only appear in the days or days of the week fields"
+            )
+        atom = "*"
+
+    if field == FIELD_DOTW:
+        if atom.startswith("%"):
+            raise InvalidUsage(field,
+                "monotonic constraints cannot be used in the days of the week"
+                " field"
+            )
+
+        if atom == "*":
+            return (CONSTRAINT_ANNOTATION, set())
+
+        days = set(as_annotation(field, str(n)) for n in expand(field, atom))
+        if len(days) == 7:
+            raise InvalidField(field,
+                "\"%s\" includes every day of the week; an asterisk should be"
+                " used instead"
+            )
+
+        return (CONSTRAINT_ANNOTATION, days)
+
+    if ANNOTATABLE_FIELD_REGEX.match(atom):
+        return (CONSTRAINT_ANNOTATION, set([as_annotation(field, atom)]))
+
+    if not atom.startswith("%"):
+        return (CONSTRAINT_FIXED, expand(field, atom))
+
+    if (not epoch or None in epoch[:3]) and field in \
+      (FIELD_YEARS, FIELD_MONTHS, FIELD_DAYS):
+        raise FieldSyntaxError(field,
+            "epoch must include a date to use monotonic constraints in the"
+            " year, month or day field fields"
+        )
+
+    if (not epoch or epoch.timestamp is None) and field in \
+      (FIELD_HOURS, FIELD_MINUTES, FIELD_SECONDS):
+        raise FieldSyntaxError(field,
+            "epoch must include a timestamp to use monotonic constraints in"
+            " the hour, minute or second fields"
+        )
+
+    try:
+        period = int(atom[1:])
+    except ValueError:
+        raise FieldSyntaxError(field, "missing integer after %%")
+    else:
+        if period < 2:
+            raise OutOfBounds(field, "period must be greater than 1")
+
+    # Convert monotonic constraints to fixed constraints where possible.
+    if field == FIELD_YEARS:
+        _, year_max = FIELD_RANGES[field]
+        series = range(epoch.year, year_max, period)
+
+    elif field == FIELD_MONTHS and not (12 % period):
+        shift = epoch.month - 1
+        count = 12 // period
+        series = ((n * period + shift) % 12 + 1 for n in range(count))
+
+    elif field == FIELD_SECONDS and not (60 % period):
+        shift = epoch.timestamp or 0
+        count = 60 // period
+        series = ((n * period + shift) % 60 for n in range(count))
+
+    else:
+        return (CONSTRAINT_MONOTONIC, period)
+
+    return (CONSTRAINT_FIXED, frozenset(series))
+
+
+def as_annotation(field, expression):
+    """
+    Convert an textual representation of an annotation into an annotation
+    tuple. This function expects the expression inputs to be well-formed; the
+    caller should validate "expression" by ensuring that it matches
+    "ANNOTATABLE_FIELD_REGEX".
+
+    Arguments:
+    - field: Field name.
+    - expression: Expression to translate to an annotation.
+
+    Returns: Annotation representing the expression.
     """
     if "#" in expression:
         day_of_the_week, value = map(int, expression.split("#", 1))
-        day_of_the_week = dotw_7to0(day_of_the_week)
-        OutOfBounds.check(field, day_of_the_week, expression)
+
+        if field != FIELD_DOTW:
+            raise InvalidUsage(field,
+                "Nth occurrence of a day of the week (%s) is only valid in the"
+                " days of the week field" % (expression, )
+            )
 
         if value < 1 or value > 5:
             raise OutOfBounds(field,
@@ -339,23 +490,23 @@ def translate(field, expression):
                 " than or equal to 5 (found %d in %s)" % (value, expression)
             )
 
-        if field != "days_of_the_week":
-            raise InvalidUsage(field,
-                "Nth occurrence of a day of the week (%s) is only valid in the"
-                " days of the week field" % (expression, )
-            )
-
-        return (DYNAMIC_XHX, day_of_the_week, value)
+        OutOfBounds.check(field, day_of_the_week, expression)
+        return (ANNOTATION_XHX, day_of_the_week, value)
 
     if expression == "L":
-        if field not in ("days", "days_of_the_week"):
-            raise InvalidUsage(field,
-                "'L' is only applicable to the days (last day of the"
-                " month) and days of the week (last day of the week;"
-                " always Saturday) fields"
+        if field == FIELD_DOTW:
+            raise Error(
+                "L in the days-of-the-week should never reach this function"
+                " because it should already be converted to a 6 by the caller"
             )
 
-        return (DYNAMIC_L_LX, 0)
+        if field == FIELD_DAYS:
+            return (ANNOTATION_L_LX, 0)
+
+        raise InvalidUsage(field,
+            "'L' is only applicable to the days (last day of the month) and"
+            " days of the week (last day of the week; always Saturday) fields"
+        )
 
     if expression.startswith("L-"):
         distance = int(expression.split("-")[1])
@@ -366,31 +517,43 @@ def translate(field, expression):
                 " the month is invalid" % (distance, )
             )
 
-        if field != "days":
+        if field != FIELD_DAYS:
             raise InvalidUsage(field,
                 "days before the end of the month (%r) is only applicable"
                 " to the days field" % (expression, )
             )
 
-        return (DYNAMIC_L_LX, distance)
+        return (ANNOTATION_L_LX, distance)
 
     if expression.endswith("L"):
-        day_of_the_week = dotw_7to0(int(expression[:-1]))
-        OutOfBounds.check(field, day_of_the_week, expression)
+        day_of_the_week = int(expression[:-1])
+        OutOfBounds.check(FIELD_DOTW, day_of_the_week, expression)
 
-        if field != "days_of_the_week":
-            day_name = DAYS_OF_THE_WEEK[day_of_the_week]
+        if field != FIELD_DOTW:
+            for day_name, value in DAY_MAP.items():
+                if day_of_the_week == value:
+                    break
+
             raise InvalidUsage(field,
-                "last occurrence of %s (%s) is only applicable to the days"
-                " of the week field" % (expression, day_name)
+                "last occurrence of %s. (%s) is only applicable to the days of"
+                " the week field" % (expression, day_name)
             )
 
-        return (DYNAMIC_XL, day_of_the_week)
+        return (ANNOTATION_XL, day_of_the_week)
 
     if expression.endswith("W"):
+        if field != FIELD_DAYS:
+            raise InvalidUsage(field,
+                "the weekday nearest the day (%r) is only applicable to the"
+                " days of the month field" % (expression, )
+            )
         day = int(expression[:-1])
         OutOfBounds.check(field, day, expression)
-        return (DYNAMIC_XW, day)
+        return (ANNOTATION_XW, day)
+
+    dotw = int(expression)
+    OutOfBounds.check(field, dotw)
+    return (ANNOTATION_DOTW, dotw)
 
 
 def check_monotonic(value, series, numerator=0):
@@ -399,12 +562,12 @@ def check_monotonic(value, series, numerator=0):
     value is divided by the numerator when the numerator is a non-zero value.
 
     Arguments:
-    - value: number 
-    - series: set of numbers representing monotonic periods.
-    - numerator: when non-zero, the value is divided by this number before
+    - value: Number.
+    - series: Set of numbers representing monotonic periods.
+    - numerator: When non-zero, the value is divided by this number before
       checking for membership in the series.
 
-    Returns: boolean True or False indicating membership.
+    Returns: A boolean True or False indicating membership.
     """
     if series and value:
         if numerator:
@@ -419,15 +582,15 @@ def check_monotonic(value, series, numerator=0):
 
 def annotate(year, month, day):
     """
-    Return a set of annotations that apply to the given date. If a date is
-    invalid, None is returned.
+    Return a set of annotations that apply to the given date. This function
+    does not validate the date.
 
     Arguments:
-    - year: integer representing the date's year.
-    - month: integer representing the date's month.
-    - day: integer representing the day of the month.
+    - year (int): Year of the date.
+    - month (int): Month of the date.
+    - day (int): Day of the month.
 
-    Returns: a frozenset containing applicable annotations.
+    Returns: A frozenset containing applicable annotations.
     """
     if month in (1, 3, 5, 7, 8, 10, 12):
         last_day_of_month = 31
@@ -435,7 +598,7 @@ def annotate(year, month, day):
         last_day_of_month = 30
     elif month == 2:
         last_day_of_month = 28 + (
-            not (year % 4) and (year % 100 or not (year % 400))
+            not (year % 4) and bool(year % 100 or not (year % 400))
         )
 
     y = (year - 1) if month < 3 else year
@@ -446,38 +609,40 @@ def annotate(year, month, day):
     dow %= 7
 
     annotations = [
-        (DYNAMIC_L_LX, last_day_of_month - day),
-        (DYNAMIC_XHX, dow, day // 7 + 1),
-        (DYNAMIC_DOTW, dow),
+        (ANNOTATION_L_LX, last_day_of_month - day),    # Days until end of month.
+        (ANNOTATION_XHX, dow, (day - 1) // 7 + 1),     # Nth occurrence of DOTW.
+        (ANNOTATION_DOTW, dow),                        # Day of the week.
     ]
 
+    # Last occurrence of a particular day of the week.
     if (last_day_of_month - day) < 7:
-        annotations.append((DYNAMIC_XL, dow))
+        annotations.append((ANNOTATION_XL, dow))
 
+    # Nearest week day for a given day of the month.
     if 1 <= dow <= 5:
-        annotations.append((DYNAMIC_XW, day))
+        annotations.append((ANNOTATION_XW, day))
 
         if dow == 1:
             # Sunday -> Monday
             if day > 1:
-                annotations.append((DYNAMIC_XW, day - 1))
+                annotations.append((ANNOTATION_XW, day - 1))
             # Saturday --(+2d)-> Monday because Friday is in a different month
             if day == 3:
-                annotations.append((DYNAMIC_XW, day - 2))
+                annotations.append((ANNOTATION_XW, 1))
         elif dow == 5:
             # Friday <- Saturday
             if day < last_day_of_month:
-                annotations.append((DYNAMIC_XW, day + 1))
+                annotations.append((ANNOTATION_XW, day + 1))
             # Friday <-(-2d)-- Sunday because Monday is in a different month
-            if (day + 2) > last_day_of_month:
-                annotations.append((DYNAMIC_XW, day + 2))
+            if (day + 3) > last_day_of_month:
+                annotations.append((ANNOTATION_XW, day + 2))
 
     return frozenset(annotations)
 
 
 def expand(field, expression):
     """
-    Convert an expression for a fixed condition into a series of numbers.
+    Convert an expression for a fixed constraint into a series of numbers.
 
     In Vixie cron, using a step with a range that is too large results in a
     range expanding to a single value, e.g.: "5-15/30" is effectively the same
@@ -492,7 +657,7 @@ def expand(field, expression):
       "B", the list will wrap around; for example, "23-3" in the hour field
       expands to {23, 0, 1, 2, 3}.
 
-    Returns: a frozenset containing all values enumerated by the expression.
+    Returns: A frozenset containing all values enumerated by the expression.
     """
     if expression.isdigit():
         value = int(expression)
@@ -514,11 +679,6 @@ def expand(field, expression):
     fmin, fmax = FIELD_RANGES[field]
     first = int(match.group("first") or fmin)
     last = int(match.group("last") or fmax)
-
-    if field == "days_of_the_week":
-        first = (0 if first == 7 else first)
-        last = (0 if last == 7 else last)
-
     OutOfBounds.check(field, (first, last), expression)
 
     if first < last:
@@ -530,148 +690,131 @@ def expand(field, expression):
     return frozenset(elements[::step])
 
 
-def simplify_monotonic_series(values):
+def simplify_monotonic_series(series):
     """
     Remove redundant numbers from a set of monotonic periods. For example, in
     the set {5, 17, 25, 45}, the numbers 25 and 45 are redundant because they
     are both multiples of 5, so this function would return {5, 17}.
     """
-    if len(values) < 2:
-        return values
+    factors = list()
 
-    factors = set()
-    for value in sorted(values):
+    for value in sorted(series):
         if not factors:
-            factors.add(value)
+            factors.append(value)
             continue
 
         for factor in factors:
             if not (value % factor):
                 break
         else:
-            factors.add(value)
+            factors.append(value)
 
     return frozenset(factors)
 
 
-def parse(fields, epoch=None):
+def generate_constraint_sets(parts, epoch):
     """
-    Parse and convert a series textual cron fields into machine-friendly
-    representations of static, dynamic and monotonic constraints.
+    Convert an iterable containing cron expression fields into machine-friendly
+    data structures.
 
-    Unlike Vixie cron, this function allows the use of month names and day
-    names in any context including ranges and lists.
+    Arguments:
+    - parts (iterable): Values of cron expression fields. This would generally
+      be something along the lines of `text.split()`.
+    - epoch: Epoch representing the date and / or time from which monotonic
+      constraints begin counting.
+
+    Returns: A tuple with 3 elements representing different constraints. The
+    first element contains a set of annotations for days that match the
+    constraints, the second contains one set for each field representing the
+    monotonic constraints, and the third element contains one set for each
+    field representing fixed constraints.
     """
-    dynamic = set()
-    monotonic = dict((name, set()) for name in FIELD_NAMES)
-    static = dict((name, set()) for name in FIELD_NAMES)
+    annotations = set()
+    fixed = list()
+    monotonic = list()
 
-    day_replacer = lambda match: str(DAY_MAP[match.string.upper()])
-    month_replacer = lambda match: str(MONTH_MAP[match.string.upper()])
+    for field, part in zip(FIELDS, parts):
+        field_fixed = set()
+        field_monotonic = set()
 
-    for field, contents in zip(FIELD_NAMES, fields):
-        if contents == "?" and field not in ("days", "days_of_the_week"):
-            raise InvalidUsage(field,
-                "'?' can only appear in the days or days of the week fields"
-            )
+        for atom in atomize(field, part):
+            mode, value = parse_atom(field, atom, epoch)
+            if mode == CONSTRAINT_ANNOTATION:
+                annotations.update(value)
+            elif mode == CONSTRAINT_MONOTONIC:
+                field_monotonic.add(value)
+            elif mode == CONSTRAINT_FIXED:
+                field_fixed.update(value)
 
-        if contents in ("*", "?"):
-            static[field] = ASTERISK
-            continue
-
-        atoms = contents.split(",")
-
-        if "*" in atoms:
-            raise InvalidUsage(field, "'*' must be the only value in a field")
-
-        if "?" in atoms:
-            raise InvalidUsage(field, "'?' must be the only value in a field")
-
-        # Replace 3-letter abbreviations of days of the week and months
-        # with numbers.
-        if field == "days_of_the_week":
-            contents = DAY_REGEX.sub(day_replacer, contents)
-
-        elif field == "months":
-            contents = MONTH_REGEX.sub(month_replacer, contents)
-
-        for atom in set(atoms):
-            if not atom:
-                raise FieldSyntaxError(field,
-                    "%s contains empty an expression" % (contents, )
-                )
-            if DYNAMIC_FIELD_REGEX.match(atom):
-                dynamic.add(translate(field, atom))
-
-            elif atom.startswith("%"):
-                if field == "days_of_the_week":
-                    raise InvalidUsage(field,
-                        "monotonic constraints cannot be used in the days of"
-                        "the week field"
-                    )
-
-                try:
-                    period = int(atom[1:])
-                except ValueError:
-                    raise FieldSyntaxError(field,
-                        "expected integer after %% in '%s'" % (atom, )
-                    )
-
-                if period < 2:
-                    raise OutOfBounds(field, "period must be greater than 1")
-
-                # Convert monotonic constraints to static constraints where
-                # possible.
-                if field == "months" and not (12 % period):
-                    delta = epoch[3] - 1
-                    count = 12 // period
-                    static[field].update(
-                        ((x * period + delta) % 12 + 1 for x in range(count))
-                    )
-
-                elif field == "seconds" and not (60 % period):
-                    delta = epoch[5]
-                    count = 60 // period
-                    static[field].update(
-                        ((x * period + delta) % 60 for x in range(count))
-                    )
-
-                elif field == "years":
-                    _, year_max = FIELD_RANGES[field]
-                    static[field].update(range(epoch[0], year_max + 1, period))
-
-                else:
-                    monotonic[field].add(period)
-
-            elif field == "days_of_the_week":
-                dotw_numbers = expand(field, atom)
-                dynamic.update((DYNAMIC_DOTW, dotw) for dotw in dotw_numbers)
-
-            else:
-                static[field].update(expand(field, atom))
-
-        # Any field with a set of static constraints that include all possible
+        # Any field with a set of fixed constraints that include all possible
         # values are replaced with ASTERISK references.
         begin, end = FIELD_RANGES[field]
-        if len(static[field]) == (end - begin + 1):
-            static[field] = ASTERISK
+        if len(field_fixed) == (end - begin + 1):
+            field_fixed = ASTERISK
 
-        # Delete redundant constraints in fields with static constraints that
-        # are ASTERISK references.
-        if static[field] is ASTERISK:
-            monotonic[field] = frozenset()
+        if field_fixed is ASTERISK:
+            # Delete redundant constraints.
+            field_monotonic = frozenset()
+        elif field_monotonic:
+            field_monotonic = simplify_monotonic_series(field_monotonic)
 
-        simplify_monotonic_series(monotonic[field])
+        monotonic.append(frozenset(field_monotonic))
+        fixed.append(frozenset(field_fixed))
 
-    # The standard for cron implementations is that the day of the month and
-    # the day of the week constraints trigger as a boolean OR condition when
-    # both have an explicit value. When only one field has an explicit value,
-    # the other is ignored. Since the trigger checking in this module is
-    # implemented as (day_of_the_month_matches or day_of_the_week) matches, the
-    # days field can be ignored by purging its constraints. Since the value of
-    # static["days_of_the_week"] is never actually used and dynamic is empty by
-    # default, nothing needs to be done for days of the week.
-    if static["days"] is ASTERISK and dynamic:
-        static["days"] = frozenset()
+    return frozenset(annotations), Fields(*monotonic), Fields(*fixed)
 
-    return static, dynamic, monotonic
+
+def constraints_met(when, epoch, with_seconds, annotations, monotonic, fixed):
+    if when is None:
+        when = int(time.time())
+    elif isinstance(when, float):
+        when = int(when)
+
+    if isinstance(when, int):
+        timestamp = when
+        year, month, day, hour, minute, second, _, _, _ = time.localtime(when)
+    elif len(when) > 9:
+        raise Error("time tuple has too many fields; expected 9 at most")
+    elif len(when) < (6 if with_seconds else 5):
+        insert = ", second and minute" if with_seconds else " and minute"
+        raise Error(
+            "time tuple has too few fields; at the very least, the year,"
+            " month, day, hour%s must be specified" % insert
+        )
+    else:
+        if len(when) < 9:
+            when = list(when) + [0, 0, 0, -1][-(9 - len(when)):]
+        timestamp = time.mktime(tuple(when))
+        year, month, day, hour, minute, second, _, _, _ = when
+
+    dS = timestamp - epoch.timestamp
+    dY = year - epoch.year
+    dM = dY * 12 + month - epoch.month
+
+    if not (second in fixed.seconds or check_monotonic(dS, monotonic.seconds)):
+        return False
+
+    if not (minute in fixed.minutes or
+      check_monotonic(dS, monotonic.minutes, 60)):
+        return False
+
+    if not (hour in fixed.hours or check_monotonic(dS, monotonic.hours, 3600)):
+        return False
+
+    if not (month in fixed.months or check_monotonic(dM, monotonic.months)):
+        return False
+
+    if not (year in fixed.years or check_monotonic(dY, monotonic.years)):
+        return False
+
+    # The day and day of the week fields behave differently from the others; if
+    # an asterisk is used in either field, that particular field is ignored. If
+    # neither field is an asterisk, the trigger fires when EITHER field
+    # matches.
+    if ((fixed.days is not ASTERISK and day in fixed.days) or
+      check_monotonic(dS, monotonic.days, 86400)):
+        return True
+    elif annotations:
+        return bool(annotate(year, month, day).intersection(annotations))
+    else:
+        return True
