@@ -36,6 +36,7 @@ NUMBER_TO_DOTW = {
 
 ANNOTATION_DESCRIPTIONS = {
     cronex.ANNOTATION_DOTW: "A %(value_dotw)s",
+    cronex.ANNOTATION_LW: "Last weekday of the month",
     cronex.ANNOTATION_L_LX: "%(value)dD before the end of the month",
     cronex.ANNOTATION_XHX: "%(value_dotw)s number %(count)d",
     cronex.ANNOTATION_XL: "Last %(value_dotw)s of the month",
@@ -99,6 +100,7 @@ class TestExceptionlessFunctions(TestCase):
 
     def test_annotate(self):
         DOTW = cronex.ANNOTATION_DOTW
+        LW = cronex.ANNOTATION_LW
         L_LX = cronex.ANNOTATION_L_LX
         XHX = cronex.ANNOTATION_XHX
         XL = cronex.ANNOTATION_XL
@@ -164,7 +166,7 @@ class TestExceptionlessFunctions(TestCase):
             27: ((XL, 6), (L_LX, 2), (XHX, 6, 4), (DOTW, 6)),
             28: ((XL, 0), (L_LX, 1), (XHX, 0, 4), (DOTW, 0)),
             29: ((XW, 29), (XW, 28), (XL, 1), (L_LX, 0), (XHX, 1, 5),
-                 (DOTW, 1)),
+                 (DOTW, 1), (LW, )),
         }
 
         for day, expected in expected_annotations.items():
@@ -700,15 +702,21 @@ def readable_annotations(annotations):
     results = set()
 
     for annotation in annotations:
-        annotation_type, value = annotation[:2]
-        if len(annotation) == 3:
-            count = annotation[2]
+        if len(annotation) == 1:
+            value = None
+            annotation_type = annotation[0]
+        else:
+            annotation_type, value = annotation[:2]
+            if len(annotation) == 3:
+                count = annotation[2]
 
         value_dotw = NUMBER_TO_DOTW.get(value, "")
-        template = ANNOTATION_DESCRIPTIONS.get(annotation_type)
 
-        if template is None:
+        try:
+            template = ANNOTATION_DESCRIPTIONS.get(annotation_type)
+        except KeyError:
             raise ValueError("Invalid annotation type %r" % annotation_type)
+
         results.add(template % locals())
 
     return results

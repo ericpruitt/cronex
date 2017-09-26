@@ -8,6 +8,7 @@ import time
 ANNOTATABLE_PATTERNS = [
     "L",
     "L-[0-9]+",
+    "LW",
     "[0-9]+#[0-9]+",
     "[0-9]+L",
     "[0-9]+W",
@@ -60,8 +61,8 @@ MONTH_MAP = {
 DAY_REGEX = re.compile(r"\b(%s)L?\b" % "|".join(DAY_MAP.keys()), re.I)
 MONTH_REGEX = re.compile(r"\b(%s)\b" % "|".join(MONTH_MAP.keys()), re.I)
 
-# TODO: Support for LW
 ANNOTATION_DOTW = "?"
+ANNOTATION_LW = "LW"
 ANNOTATION_L_LX = "L/L-?"
 ANNOTATION_XHX = "?#?"
 ANNOTATION_XL = "?L"
@@ -569,7 +570,10 @@ def check_monotonic(value, series, numerator=0):
 
     Returns: A boolean True or False indicating membership.
     """
-    if series and value:
+    if series:
+        if not value:
+            return False
+
         if numerator:
             value //= numerator
 
@@ -602,34 +606,40 @@ def annotate(year, month, day):
         )
 
     y = (year - 1) if month < 3 else year
-    dow = 23 * month // 9 + day + 4 + year + y // 4 - y // 100 + y // 400
+    dotw = 23 * month // 9 + day + 4 + year + y // 4 - y // 100 + y // 400
 
     if month >= 3:
-        dow -= 2
-    dow %= 7
+        dotw -= 2
+    dotw %= 7
 
     annotations = [
+        (ANNOTATION_DOTW, dotw),                       # Day of the week.
         (ANNOTATION_L_LX, last_day_of_month - day),    # Days until end of month.
-        (ANNOTATION_XHX, dow, (day - 1) // 7 + 1),     # Nth occurrence of DOTW.
-        (ANNOTATION_DOTW, dow),                        # Day of the week.
+        (ANNOTATION_XHX, dotw, (day - 1) // 7 + 1),    # Nth occurrence of DOTW.
     ]
 
     # Last occurrence of a particular day of the week.
     if (last_day_of_month - day) < 7:
-        annotations.append((ANNOTATION_XL, dow))
+        annotations.append((ANNOTATION_XL, dotw))
 
-    # Nearest week day for a given day of the month.
-    if 1 <= dow <= 5:
+    if 1 <= dotw <= 5:
         annotations.append((ANNOTATION_XW, day))
 
-        if dow == 1:
+        # Last weekday of the month.
+        if (last_day_of_month == day or
+          (dotw == 5 and last_day_of_month <= (day + 2))):
+            annotations.append((ANNOTATION_LW, ))
+
+        # Nearest week day for a given day of the month.
+        if dotw == 1:
             # Sunday -> Monday
             if day > 1:
                 annotations.append((ANNOTATION_XW, day - 1))
             # Saturday --(+2d)-> Monday because Friday is in a different month
             if day == 3:
                 annotations.append((ANNOTATION_XW, 1))
-        elif dow == 5:
+
+        elif dotw == 5:
             # Friday <- Saturday
             if day < last_day_of_month:
                 annotations.append((ANNOTATION_XW, day + 1))
@@ -776,7 +786,7 @@ def constraints_met(when, epoch, with_seconds, annotations, monotonic, fixed):
     elif len(when) > 9:
         raise Error("time tuple has too many fields; expected 9 at most")
     elif len(when) < (6 if with_seconds else 5):
-        insert = ", second and minute" if with_seconds else " and minute"
+        insert = ", minute and second" if with_seconds else " and minute"
         raise Error(
             "time tuple has too few fields; at the very least, the year,"
             " month, day, hour%s must be specified" % insert
@@ -787,9 +797,12 @@ def constraints_met(when, epoch, with_seconds, annotations, monotonic, fixed):
         timestamp = time.mktime(tuple(when))
         year, month, day, hour, minute, second, _, _, _ = when
 
-    dS = timestamp - epoch.timestamp
-    dY = year - epoch.year
-    dM = dY * 12 + month - epoch.month
+    if epoch:
+        dS = 0 if epoch.timestamp is None else timestamp - epoch.timestamp
+        dY = 0 if epoch.year is None else year - epoch.year
+        dM = 0 if epoch.year is None else dY * 12 + month - epoch.month
+    else:
+        dS, dY, dM = 0, 0, 0
 
     if not (second in fixed.seconds or check_monotonic(dS, monotonic.seconds)):
         return False
