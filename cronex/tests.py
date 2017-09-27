@@ -52,29 +52,29 @@ class TestCase(cronex.unittestmixins.TestCase.defaults(fatal=False)):
 class TestExceptionlessFunctions(TestCase):
     def test_check_monotonic(self):
         test_cases = [
-            (False, (1,  (2, 3, 5), 0)),
-            (True,  (2,  (2, 3, 5), 0)),
-            (True,  (3,  (2, 3, 5), 0)),
-            (True,  (4,  (2, 3, 5), 0)),
-            (True,  (5,  (2, 3, 5), 0)),
-            (True,  (6,  (2, 3, 5), 0)),
-            (False, (7,  (2, 3, 5), 0)),
-            (True,  (8,  (2, 3, 5), 0)),
-            (True,  (9,  (2, 3, 5), 0)),
-            (True,  (10, (2, 3, 5), 0)),
-            (False, (11, (2, 3, 5), 0)),
-            (False, (13, (2, 3, 5), 0)),
-            (False, (17, (2, 3, 5), 0)),
-            (False, (19, (2, 3, 5), 0)),
+            (False, (1,  (2, 3, 5))),
+            (True,  (2,  (2, 3, 5))),
+            (True,  (3,  (2, 3, 5))),
+            (True,  (4,  (2, 3, 5))),
+            (True,  (5,  (2, 3, 5))),
+            (True,  (6,  (2, 3, 5))),
+            (False, (7,  (2, 3, 5))),
+            (True,  (8,  (2, 3, 5))),
+            (True,  (9,  (2, 3, 5))),
+            (True,  (10, (2, 3, 5))),
+            (False, (11, (2, 3, 5))),
+            (False, (13, (2, 3, 5))),
+            (False, (17, (2, 3, 5))),
+            (False, (19, (2, 3, 5))),
+
+            (True,  (117,  (1, ))),
+            (False, (117,  (2, ))),
+            (True,  (117,  (3, ))),
+            (False, (117,  (5, ))),
 
             # 1291 is prime, so it should only matches series with 1.
-            (False, (1291, (2, 3, 5),    0)),
-            (True,  (1291, (1, 2, 3, 5), 0)),
-            # 1291 // 11 = 117 (3^2 * 13) which matches series with 3 and 1.
-            (True,  (1291, (1, ),        11)),
-            (False, (1291, (2, ),        11)),
-            (True,  (1291, (3, ),        11)),
-            (False, (1291, (5, ),        11)),
+            (False, (1291, (2, 3, 5))),
+            (True,  (1291, (1, 2, 3, 5))),
         ]
 
         for expected, args in test_cases:
@@ -170,10 +170,9 @@ class TestExceptionlessFunctions(TestCase):
         }
 
         for day, expected in expected_annotations.items():
-            expected = readable_annotations(expected)
-            got = readable_annotations(cronex.annotate(2016, 2, day))
+            got = cronex.annotate(2016, 2, day)
             iso_date = "%d-%02d-%02d" % (year, month, day)
-            self.assertEqual(expected, got, iso_date)
+            self.assertEqual(set(expected), got, iso_date)
 
         # The last weekday of January 2016 is the 29th, so it is annotated as
         # the nearest weekday for the 31st in addition to the 29th and 30th.
@@ -451,7 +450,7 @@ class TestAtomicExpressionParsing(TestCase):
     def test_parse_atom_dotw_fixed_expansion(self):
         with mock(cronex, "expand", value=(0, 1, 2)) as proxy:
             self.assertReturns((
-                cronex.CONSTRAINT_ANNOTATION,
+                cronex.EXPRESSION_ANNOTATED,
                 frozenset([
                     (cronex.ANNOTATION_DOTW, 0),
                     (cronex.ANNOTATION_DOTW, 1),
@@ -470,14 +469,14 @@ class TestAtomicExpressionParsing(TestCase):
 
                 proxy.reset()
                 sentinel = "X" + str(field)
-                self.assertReturns((cronex.CONSTRAINT_FIXED, "Y"),
+                self.assertReturns((cronex.EXPRESSION_FIXED, "Y"),
                     cronex.parse_atom, field, sentinel, None
                 )
                 self.assertEqual([((field, sentinel), {})], proxy.calls)
 
         # Verify that "?" is converted to "*" in the days of the week field.
         with mock(cronex, "expand", value="Y") as proxy:
-            self.assertReturns((cronex.CONSTRAINT_FIXED, "Y"),
+            self.assertReturns((cronex.EXPRESSION_FIXED, "Y"),
                 cronex.parse_atom, cronex.FIELD_DAYS, "?", None
             )
             self.assertEqual([((cronex.FIELD_DAYS, "*"), {})], proxy.calls)
@@ -490,7 +489,7 @@ class TestAtomicExpressionParsing(TestCase):
 
         with mock(cronex, "ANNOTATABLE_FIELD_REGEX", value=RegexMock):
             with mock(cronex, "as_annotation", value="X") as f:
-                self.assertReturns((cronex.CONSTRAINT_ANNOTATION, set(["X"])),
+                self.assertReturns((cronex.EXPRESSION_ANNOTATED, set(["X"])),
                     cronex.parse_atom, cronex.FIELD_DAYS, "Y", None
                 )
                 self.assertEqual([((cronex.FIELD_DAYS, "Y"), {})], f.calls)
@@ -504,7 +503,7 @@ class TestAtomicExpressionParsing(TestCase):
         ]
 
         for expected, expression, epoch in test_cases:
-            self.assertReturns((cronex.CONSTRAINT_FIXED, set(expected)),
+            self.assertReturns((cronex.EXPRESSION_FIXED, set(expected)),
                 cronex.parse_atom, cronex.FIELD_MONTHS, expression, epoch
             )
 
@@ -517,7 +516,7 @@ class TestAtomicExpressionParsing(TestCase):
         ]
 
         for expected, expression, epoch in test_cases:
-            self.assertReturns((cronex.CONSTRAINT_FIXED, set(expected)),
+            self.assertReturns((cronex.EXPRESSION_FIXED, set(expected)),
                 cronex.parse_atom,
                     cronex.FIELD_YEARS, expression, epoch
             )
@@ -531,7 +530,7 @@ class TestAtomicExpressionParsing(TestCase):
         ]
 
         for expected, expression, epoch in test_cases:
-            self.assertReturns((cronex.CONSTRAINT_FIXED, set(expected)),
+            self.assertReturns((cronex.EXPRESSION_FIXED, set(expected)),
                 cronex.parse_atom,
                     cronex.FIELD_SECONDS, expression, epoch
             )
@@ -543,20 +542,20 @@ class TestAtomicExpressionParsing(TestCase):
             if field in (cronex.FIELD_YEARS, cronex.FIELD_DOTW):
                 continue
             # 7 is co-prime to the ends of the ranges of all fields, so it
-            # should never be converted to a fixed constraint.
-            self.assertReturns((cronex.CONSTRAINT_MONOTONIC, 7),
+            # should never be converted to a fixed expression.
+            self.assertReturns((cronex.EXPRESSION_MONOTONIC, 7),
                 cronex.parse_atom, field, "%7", epoch
             )
 
 
 class TestConstraintGeneration(TestCase):
-    def test_generate_constraint_sets(self):
+    def test_generate_expression_sets(self):
         pass
 
 
 class TestCronExpression(TestCase):
     def test_field_count_validation(self):
-        with mock(cronex, "generate_constraint_sets"):
+        with mock(cronex, "generate_expression_sets"):
             self.assertRaises(cronex.MissingFieldsError,
                 cronex.CronExpression, "* * * *"
             )
@@ -585,7 +584,7 @@ class TestCronExpression(TestCase):
             (("@daily", "QQQ WWW"),    ("@daily       QQQ WWW  ", )),
         ]
 
-        with mock(cronex, "generate_constraint_sets"):
+        with mock(cronex, "generate_expression_sets"):
             for (expected_expression, expected_comment), args in test_cases:
                 c = cronex.CronExpression(*args)
                 self.assertEqual(expected_expression, c.expression)
@@ -602,67 +601,100 @@ class TestCronExpression(TestCase):
                 self.assertEqual(expected_comment, c.comment)
 
     def test_equality(self):
-        with mock(cronex, "generate_constraint_sets", value="AAA"):
-            a = cronex.CronExpression("* * * * *")
-
+        a = cronex.CronExpression("* * * * *", cronex.Epoch(1970, 1, 1, 0))
         self.assertNotEqual(a, "a")
         self.assertEqual(a, a)
 
-        with mock(cronex, "generate_constraint_sets", value="AAA"):
-            a2 = cronex.CronExpression("* * * * *")
-
-        self.assertEqual(a, a2)
+        a2 = cronex.CronExpression("* * * * *", cronex.Epoch(1970, 1, 1, 0))
+        self.assertEqual(a2, a2)
         self.assertEqual(a, a2)
 
-        with mock(cronex, "generate_constraint_sets", value="BBB"):
-            b = cronex.CronExpression("* * * * *")
-
-        self.assertNotEqual(b, "b")
-        self.assertNotEqual(a, b)
+        b = cronex.CronExpression("0 0 * * *", cronex.Epoch(1970, 1, 1, 0))
         self.assertEqual(b, b)
+        self.assertNotEqual(a, b)
+        self.assertNotEqual(a2, b)
 
-        with mock(cronex, "generate_constraint_sets", value="CCC"):
-            c = cronex.CronExpression("* * * * *")
+        # The epoch shouldn't affect equality when there are no monotonic
+        # expressions.
+        b2 = cronex.CronExpression(
+            "0 0 * * *", cronex.Epoch(2000, 12, 31, 999999))
+        self.assertEqual(b2, b2)
+        self.assertEqual(b, b2)
 
-        self.assertNotEqual(c, "c")
-        self.assertNotEqual(a, c)
-        self.assertNotEqual(b, c)
+        b3 = cronex.CronExpression(
+            "0 0 * * *", cronex.Epoch(1999, 1, 1, 1234567))
+        self.assertEqual(b3, b3)
+        self.assertNotEqual(a, b3)
+
+        # The Y-M-D epoch should be ignored if there are no monotonic
+        # expressions for the month and day.
+        c = cronex.CronExpression(
+            "%91 * * * *", cronex.Epoch(1999, 1, 1, 3333))
         self.assertEqual(c, c)
+        self.assertNotEqual(a, c)
 
-        # Expressions with the same monotonic constraints are different if they
-        # have different epochs for the relevant fields.
-        epoch_x = cronex.Epoch(1970, 1, 1, 0)
-        epoch_x_without_date = cronex.Epoch(None, None, None, 0)
-        epoch_x_without_timestamp = cronex.Epoch(1970, 1, 1, None)
-        x_epochs = (epoch_x, epoch_x_without_date, epoch_x_without_timestamp)
+        c2 = cronex.CronExpression(
+            "%91 * * * *", cronex.Epoch(2020, 9, 6, 3333))
+        self.assertEqual(c2, c2)
+        self.assertEqual(c, c2)
 
-        epoch_z = cronex.Epoch(2000, 1, 1, 946713600)
-        epoch_z_without_date = cronex.Epoch(None, None, None, 946713600)
-        epoch_z_without_timestamp = cronex.Epoch(2000, 1, 1, None)
-        z_epochs = (epoch_z, epoch_z_without_date, epoch_z_without_timestamp)
+        d = cronex.CronExpression(
+            "* %91 * * *", cronex.Epoch(1999, 1, 1, 3333))
+        self.assertEqual(d, d)
+        self.assertNotEqual(a, d)
 
-        fixed_only_expression = "* * * * *"
-        monotonic_date_expression = "* * %11 * *"
-        monotonic_time_expression = "%91 * * * *"
-        monotonic_date_and_time_expression = "%91 * %11 * *"
+        d2 = cronex.CronExpression(
+            "* %91 * * *", cronex.Epoch(2020, 9, 6, 3333))
+        self.assertEqual(d2, d2)
+        self.assertEqual(d, d2)
 
-        for xe, ze in itertools.product(x_epochs, z_epochs):
-            # When there are no monotonic constraints, the epoch doesn't matter.
-            x = cronex.CronExpression("* * * * *", epoch=xe)
-            z = cronex.CronExpression("* * * * *", epoch=ze)
-            self.assertEqual(x, z)
+        e = cronex.CronExpression(
+            "%91 * * * * *", cronex.Epoch(1999, 1, 1, 3333), with_seconds=True)
+        self.assertEqual(e, e)
+        self.assertNotEqual(a, e)
 
-            # Either expression has monotonic constraints, their epochs must be
-            # the same to be considered equal.
-            if xe.timestamp is not None and ze.timestamp is not None:
-                x = cronex.CronExpression("%91 * * * *", epoch=xe)
-                z = cronex.CronExpression("%91 * * * *", epoch=ze)
-                self.assertNotEqual(x, z)
+        e2 = cronex.CronExpression(
+            "%91 * * * * *", cronex.Epoch(2020, 9, 6, 3333), with_seconds=True)
+        self.assertEqual(e2, e2)
+        self.assertEqual(e, e2)
 
-            if xe.year is not None and ze.year is not None:
-                x = cronex.CronExpression("* * %77 * *", epoch=xe)
-                z = cronex.CronExpression("* * %77 * *", epoch=ze)
-                self.assertNotEqual(x, z)
+        # The epoch timestamp should be ignored if there are no monotonic
+        # expressions for the minute, second and hour.
+        f = cronex.CronExpression(
+            "* * %91 * *", cronex.Epoch(1999, 1, 1, 1111111))
+        self.assertEqual(f, f)
+        self.assertNotEqual(a, f)
+
+        f2 = cronex.CronExpression(
+            "* * %91 * *", cronex.Epoch(1999, 1, 1, 2222222))
+        self.assertEqual(f2, f2)
+        self.assertEqual(f, f2)
+
+        g = cronex.CronExpression(
+            "* * * %91 *", cronex.Epoch(1999, 1, 1, 1111111))
+        self.assertEqual(g, g)
+        self.assertNotEqual(a, g)
+
+        g2 = cronex.CronExpression(
+            "* * * %91 *", cronex.Epoch(1999, 1, 1, 2222222))
+        self.assertEqual(g2, g2)
+        self.assertEqual(g, g2)
+
+        # The entire epoch matters in other cases.
+        h = cronex.CronExpression(
+            "%91 %91 %91 * *", cronex.Epoch(1999, 1, 1, 1111111))
+        self.assertEqual(h, h)
+        self.assertNotEqual(a, h)
+
+        k = cronex.CronExpression(
+            "%91 %91 %91 * *", cronex.Epoch(2038, 3, 2, 1111111))
+        self.assertEqual(k, k)
+        self.assertNotEqual(h, k)
+
+        m = cronex.CronExpression(
+            "%91 %91 %91 * *", cronex.Epoch(1999, 1, 1, 222222222))
+        self.assertEqual(m, m)
+        self.assertNotEqual(h, m)
 
     def test_repr_and_str(self):
         test_cases = [
@@ -686,40 +718,6 @@ class TestCronExpression(TestCase):
             self.assertEqual(a, b)
             self.assertEqual(repr(a), repr(b))
             self.assertEqual(str(a), str(b))
-
-
-def readable_annotations(annotations):
-    """
-    Convert Cronex day annotations into human-readable strings.
-
-    Arguments:
-    - annotations (iterable): Iterable containing annotations generated by
-      cronex.annotate.
-
-    Returns: A set containing human readable strings describing the
-    annotations.
-    """
-    results = set()
-
-    for annotation in annotations:
-        if len(annotation) == 1:
-            value = None
-            annotation_type = annotation[0]
-        else:
-            annotation_type, value = annotation[:2]
-            if len(annotation) == 3:
-                count = annotation[2]
-
-        value_dotw = NUMBER_TO_DOTW.get(value, "")
-
-        try:
-            template = ANNOTATION_DESCRIPTIONS.get(annotation_type)
-        except KeyError:
-            raise ValueError("Invalid annotation type %r" % annotation_type)
-
-        results.add(template % locals())
-
-    return results
 
 
 @contextlib.contextmanager

@@ -5,6 +5,8 @@ import sys
 import traceback
 import unittest
 
+unittest.util._MAX_LENGTH = 2000
+
 # TODO: Better set differences.
 # TODO: Context manager that set default message for failing tests.
 # TODO: Show default sequence diff message in addition to the user-specified message.

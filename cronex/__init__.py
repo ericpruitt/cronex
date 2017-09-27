@@ -3,6 +3,7 @@
 import collections
 import re
 import time
+import datetime
 # TODO: add tests for each member of ANNOTATABLE_PATTERNS
 
 ANNOTATABLE_PATTERNS = [
@@ -32,9 +33,9 @@ FIELD_MONTHS = "months"
 FIELD_DOTW = "days_of_the_week"
 FIELD_YEARS = "years"
 
-CONSTRAINT_ANNOTATION = "dynamic"
-CONSTRAINT_MONOTONIC = "monotonic"
-CONSTRAINT_FIXED = "fixed"
+EXPRESSION_ANNOTATED = "expression annotations"
+EXPRESSION_MONOTONIC = "monotonic expression periods"
+EXPRESSION_FIXED = "fixed expression values"
 
 ORDERED_FIELD_RANGES_AND_NAMES = (
     (FIELD_SECONDS, (0,   59)),
@@ -61,12 +62,12 @@ MONTH_MAP = {
 DAY_REGEX = re.compile(r"\b(%s)L?\b" % "|".join(DAY_MAP.keys()), re.I)
 MONTH_REGEX = re.compile(r"\b(%s)\b" % "|".join(MONTH_MAP.keys()), re.I)
 
-ANNOTATION_DOTW = "?"
-ANNOTATION_LW = "LW"
-ANNOTATION_L_LX = "L/L-?"
-ANNOTATION_XHX = "?#?"
-ANNOTATION_XL = "?L"
-ANNOTATION_XW = "?W"
+ANNOTATION_DOTW = "day of the week"
+ANNOTATION_LW = "last weekday"
+ANNOTATION_L_LX = "days until the end of the month"
+ANNOTATION_XHX = "nth occurrence of a day of the week"
+ANNOTATION_XL = "last occurrence of a day of the week in a month"
+ANNOTATION_XW = "weekday nearest a particular day of the month"
 
 ANNOTATABLE_FIELD_REGEX = re.compile("^(%s)$" % "|".join(ANNOTATABLE_PATTERNS))
 RANGE_REGEX = re.compile("((?P<first>\d+)-(?P<last>\d+)|\*)(/(?P<step>\d+))?$")
@@ -75,7 +76,7 @@ RANGE_REGEX = re.compile("((?P<first>\d+)-(?P<last>\d+)|\*)(/(?P<step>\d+))?$")
 class Epoch(
   collections.namedtuple("Epoch", ["year", "month", "day", "timestamp"])):
     """
-    Date and / or time from which monotonic constraints begin counting.
+    Date and / or time from which monotonic expressions begin counting.
     """
 
 
@@ -199,7 +200,7 @@ class CronExpression(object):
           and 7 are also allowed depending on whether or not "with_seconds" and
           "with_years" are True.
         - epoch: Epoch representing the date and / or time from which monotonic
-          constraints begin counting.
+          expressions begin counting.
         - with_seconds: Boolean value indicating whether or not the text
           expression includes a field for seconds.
         - with_years: Boolean value indicating whether or not the text
@@ -265,7 +266,7 @@ class CronExpression(object):
             raise Error("%r is not a supported epoch type" % (epoch, ))
 
         try:
-            self._constraints = generate_constraint_sets(fields, epoch)
+            self._expression_sets = generate_expression_sets(fields, epoch)
         except Error as e:
             raise Error("%s: %s" % (text.strip(), e))
 
@@ -277,30 +278,40 @@ class CronExpression(object):
         self._comment = comment.strip()
         self._expression = " ".join(text.replace(self.comment, "").split())
 
-    def check_trigger(self, when):
-        return constraints_met(
-            when, self._epoch, self._with_seconds, *self._constraints)
+    def check_trigger(self, when=None):
+        return constraints_satisfied(
+            when, self._epoch, self._with_seconds, *self._expression_sets)
 
     def __eq__(self, other):
         """
         Two CronExpression instances are considered equivalent if they have the
-        same constraints. It is possible to construct two expressions that are
+        same expressions. It is possible to construct two expressions that are
         not considered equal that trigger at the same time.
         """
-        # TODO: The epoch doesn't necessarily apply to every field, so this
-        # should be modified to only compare certain parts of the epoch based
-        # on the fields that have monotonic expressions.
+        if self is other:
+            return True
+
         try:
-            if self._constraints != other._constraints:
+            if self._expression_sets != other._expression_sets:
                 return False
 
-            _, monotonic, _ = self._constraints
-            if not any(monotonic):
+            _, monotonic_periods, _ = self._expression_sets
+            if not any(monotonic_periods):
                 return True
 
-            return self._epoch == other._epoch
+            if ((monotonic_periods.months or monotonic_periods.days)
+              and self._epoch[:3] != other._epoch[:3]):
+                return False
+
+            if (monotonic_periods.hours or monotonic_periods.minutes or
+              monotonic_periods.seconds):
+                return self._epoch.timestamp == other._epoch.timestamp
+
+            return True
 
         except AttributeError:
+            if isinstance(other, CronExpression):
+                raise
             return False
 
     def __repr__(self):
@@ -383,7 +394,7 @@ def parse_atom(field, atom, epoch):
     - field (str): Cron expression field name.
     - atom (str): Expression atom.
     - epoch: Epoch representing the date and / or time from which monotonic
-      constraints begin counting.
+      expressions begin counting.
 
     Returns: A tuple containing (type of resulting expression, associated
     values).
@@ -398,12 +409,12 @@ def parse_atom(field, atom, epoch):
     if field == FIELD_DOTW:
         if atom.startswith("%"):
             raise InvalidUsage(field,
-                "monotonic constraints cannot be used in the days of the week"
+                "monotonic expressions cannot be used in the days of the week"
                 " field"
             )
 
         if atom == "*":
-            return (CONSTRAINT_ANNOTATION, set())
+            return (EXPRESSION_ANNOTATED, set())
 
         days = set(as_annotation(field, str(n)) for n in expand(field, atom))
         if len(days) == 7:
@@ -412,25 +423,25 @@ def parse_atom(field, atom, epoch):
                 " used instead"
             )
 
-        return (CONSTRAINT_ANNOTATION, days)
+        return (EXPRESSION_ANNOTATED, days)
 
     if ANNOTATABLE_FIELD_REGEX.match(atom):
-        return (CONSTRAINT_ANNOTATION, set([as_annotation(field, atom)]))
+        return (EXPRESSION_ANNOTATED, set([as_annotation(field, atom)]))
 
     if not atom.startswith("%"):
-        return (CONSTRAINT_FIXED, expand(field, atom))
+        return (EXPRESSION_FIXED, expand(field, atom))
 
     if (not epoch or None in epoch[:3]) and field in \
       (FIELD_YEARS, FIELD_MONTHS, FIELD_DAYS):
         raise FieldSyntaxError(field,
-            "epoch must include a date to use monotonic constraints in the"
+            "epoch must include a date to use monotonic expressions in the"
             " year, month or day field fields"
         )
 
     if (not epoch or epoch.timestamp is None) and field in \
       (FIELD_HOURS, FIELD_MINUTES, FIELD_SECONDS):
         raise FieldSyntaxError(field,
-            "epoch must include a timestamp to use monotonic constraints in"
+            "epoch must include a timestamp to use monotonic expressions in"
             " the hour, minute or second fields"
         )
 
@@ -440,9 +451,9 @@ def parse_atom(field, atom, epoch):
         raise FieldSyntaxError(field, "missing integer after %%")
     else:
         if period < 2:
-            raise OutOfBounds(field, "period must be greater than 1")
+            raise OutOfBounds(field, "monotonic period must be greater than 1")
 
-    # Convert monotonic constraints to fixed constraints where possible.
+    # Convert monotonic expressions to fixed expressions where possible.
     if field == FIELD_YEARS:
         _, year_max = FIELD_RANGES[field]
         series = range(epoch.year, year_max, period)
@@ -458,9 +469,9 @@ def parse_atom(field, atom, epoch):
         series = ((n * period + shift) % 60 for n in range(count))
 
     else:
-        return (CONSTRAINT_MONOTONIC, period)
+        return (EXPRESSION_MONOTONIC, period)
 
-    return (CONSTRAINT_FIXED, frozenset(series))
+    return (EXPRESSION_FIXED, frozenset(series))
 
 
 def as_annotation(field, expression):
@@ -557,25 +568,20 @@ def as_annotation(field, expression):
     return (ANNOTATION_DOTW, dotw)
 
 
-def check_monotonic(value, series, numerator=0):
+def check_monotonic(value, series):
     """
-    Check to see if a value is a multiple of any numbers in the series. The
-    value is divided by the numerator when the numerator is a non-zero value.
+    Check to see if a value is a multiple of any numbers in the series.
 
     Arguments:
     - value: Number.
     - series: Set of numbers representing monotonic periods.
-    - numerator: When non-zero, the value is divided by this number before
-      checking for membership in the series.
 
     Returns: A boolean True or False indicating membership.
     """
     if series:
+        # TODO: unit test proper support of 0s
         if not value:
-            return False
-
-        if numerator:
-            value //= numerator
+            return True
 
         for item in series:
             if not (value % item):
@@ -652,7 +658,7 @@ def annotate(year, month, day):
 
 def expand(field, expression):
     """
-    Convert an expression for a fixed constraint into a series of numbers.
+    Convert an expression for a fixed expression into a series of numbers.
 
     In Vixie cron, using a step with a range that is too large results in a
     range expanding to a single value, e.g.: "5-15/30" is effectively the same
@@ -722,7 +728,7 @@ def simplify_monotonic_series(series):
     return frozenset(factors)
 
 
-def generate_constraint_sets(parts, epoch):
+def generate_expression_sets(parts, epoch):
     """
     Convert an iterable containing cron expression fields into machine-friendly
     data structures.
@@ -731,50 +737,52 @@ def generate_constraint_sets(parts, epoch):
     - parts (iterable): Values of cron expression fields. This would generally
       be something along the lines of `text.split()`.
     - epoch: Epoch representing the date and / or time from which monotonic
-      constraints begin counting.
+      expressions begin counting.
 
-    Returns: A tuple with 3 elements representing different constraints. The
+    Returns: A tuple with 3 elements representing different expressions. The
     first element contains a set of annotations for days that match the
-    constraints, the second contains one set for each field representing the
-    monotonic constraints, and the third element contains one set for each
-    field representing fixed constraints.
+    expressions, the second contains one set for each field representing the
+    monotonic expressions, and the third element contains one set for each
+    field representing fixed expressions.
     """
     annotations = set()
-    fixed = list()
-    monotonic = list()
+    fixed_values = list()
+    monotonic_periods = list()
 
     for field, part in zip(FIELDS, parts):
-        field_fixed = set()
-        field_monotonic = set()
+        fixed_field_values = set()
+        field_monotonic_periods = set()
 
         for atom in atomize(field, part):
             mode, value = parse_atom(field, atom, epoch)
-            if mode == CONSTRAINT_ANNOTATION:
+            if mode == EXPRESSION_ANNOTATED:
                 annotations.update(value)
-            elif mode == CONSTRAINT_MONOTONIC:
-                field_monotonic.add(value)
-            elif mode == CONSTRAINT_FIXED:
-                field_fixed.update(value)
+            elif mode == EXPRESSION_MONOTONIC:
+                field_monotonic_periods.add(value)
+            elif mode == EXPRESSION_FIXED:
+                fixed_field_values.update(value)
 
-        # Any field with a set of fixed constraints that include all possible
+        # Any field with a set of fixed expressions that include all possible
         # values are replaced with ASTERISK references.
         begin, end = FIELD_RANGES[field]
-        if len(field_fixed) == (end - begin + 1):
-            field_fixed = ASTERISK
+        if len(fixed_field_values) == (end - begin + 1):
+            fixed_field_values = ASTERISK
 
-        if field_fixed is ASTERISK:
-            # Delete redundant constraints.
-            field_monotonic = frozenset()
-        elif field_monotonic:
-            field_monotonic = simplify_monotonic_series(field_monotonic)
+        # Delete redundant expression data.
+        if fixed_field_values is ASTERISK:
+            field_monotonic_periods = frozenset()
+        else:
+            field_monotonic_periods = (
+                simplify_monotonic_series(field_monotonic_periods))
 
-        monotonic.append(frozenset(field_monotonic))
-        fixed.append(frozenset(field_fixed))
+        monotonic_periods.append(frozenset(field_monotonic_periods))
+        fixed_values.append(frozenset(fixed_field_values))
 
-    return frozenset(annotations), Fields(*monotonic), Fields(*fixed)
+    annotations = frozenset(annotations)
+    return annotations, Fields(*monotonic_periods), Fields(*fixed_values)
 
 
-def constraints_met(when, epoch, with_seconds, annotations, monotonic, fixed):
+def constraints_satisfied(when, epoch, with_seconds, annotations, monotonic_periods, fixed_values):
     if when is None:
         when = int(time.time())
     elif isinstance(when, float):
@@ -797,35 +805,43 @@ def constraints_met(when, epoch, with_seconds, annotations, monotonic, fixed):
         timestamp = time.mktime(tuple(when))
         year, month, day, hour, minute, second, _, _, _ = when
 
+    dS = dY = dM = dD = 0
+
     if epoch:
         dS = 0 if epoch.timestamp is None else timestamp - epoch.timestamp
-        dY = 0 if epoch.year is None else year - epoch.year
-        dM = 0 if epoch.year is None else dY * 12 + month - epoch.month
-    else:
-        dS, dY, dM = 0, 0, 0
+        dY = 0 if epoch.day is None else year - epoch.year
+        dM = 0 if epoch.day is None else dY * 12 + month - epoch.month
 
-    if not (second in fixed.seconds or check_monotonic(dS, monotonic.seconds)):
+    if monotonic_periods.days:
+        epoch_day = datetime.datetime.date(epoch.year, epoch.month, epoch.day)
+        dD = datetime.datetime.date(year, month, day) - epoch_day
+
+    if not (second in fixed_values.seconds or
+      check_monotonic(dS, monotonic_periods.seconds)):
         return False
 
-    if not (minute in fixed.minutes or
-      check_monotonic(dS, monotonic.minutes, 60)):
+    if not (minute in fixed_values.minutes or
+      check_monotonic(dS // 60, monotonic_periods.minutes)):
         return False
 
-    if not (hour in fixed.hours or check_monotonic(dS, monotonic.hours, 3600)):
+    if not (hour in fixed_values.hours or
+      check_monotonic(dS // 3600, monotonic_periods.hours)):
         return False
 
-    if not (month in fixed.months or check_monotonic(dM, monotonic.months)):
+    if not (month in fixed_values.months or
+      check_monotonic(dM, monotonic_periods.months)):
         return False
 
-    if not (year in fixed.years or check_monotonic(dY, monotonic.years)):
+    if not (year in fixed_values.years or
+      check_monotonic(dY, monotonic_periods.years)):
         return False
 
     # The day and day of the week fields behave differently from the others; if
     # an asterisk is used in either field, that particular field is ignored. If
     # neither field is an asterisk, the trigger fires when EITHER field
     # matches.
-    if ((fixed.days is not ASTERISK and day in fixed.days) or
-      check_monotonic(dS, monotonic.days, 86400)):
+    if ((fixed_values.days is not ASTERISK and day in fixed_values.days) or
+      check_monotonic(dD, monotonic_periods.days)):
         return True
     elif annotations:
         return bool(annotate(year, month, day).intersection(annotations))
