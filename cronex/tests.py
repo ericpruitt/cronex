@@ -21,7 +21,6 @@ CronExpression:
     def _configure(self, when=None):
 
 # --
-def parse_atom(fields, epoch=None):
 """
 
 NUMBER_TO_DOTW = {
@@ -66,6 +65,10 @@ class TestExceptionlessFunctions(TestCase):
             (False, (13, (2, 3, 5))),
             (False, (17, (2, 3, 5))),
             (False, (19, (2, 3, 5))),
+
+            (False, (0,   [])),
+            (False, (10,  [])),
+            (True,  (0,   (1, 2, 3))),
 
             (True,  (117,  (1, ))),
             (False, (117,  (2, ))),
@@ -358,6 +361,10 @@ class TestFieldSplitting(TestCase):
             # No fields may be empty.
             self.assertRaises(cronex.FieldSyntaxError,
                 cronex.atomize, field, ""
+            )
+
+            self.assertRaises(cronex.FieldSyntaxError,
+                cronex.atomize, field, "1,,2"
             )
 
             # Multiple asterisks in one field are invalid.

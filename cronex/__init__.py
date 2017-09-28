@@ -200,7 +200,10 @@ class CronExpression(object):
           and 7 are also allowed depending on whether or not "with_seconds" and
           "with_years" are True.
         - epoch: Epoch representing the date and / or time from which monotonic
-          expressions begin counting.
+          expressions begin counting in the form of a Unix timestamp, (Y, M, D,
+          HH, MM[, SS]) local time tuple or a 9-element time tuple
+          (time.struct_time). If this argument is `None`, the current time is
+          used.
         - with_seconds: Boolean value indicating whether or not the text
           expression includes a field for seconds.
         - with_years: Boolean value indicating whether or not the text
@@ -279,6 +282,11 @@ class CronExpression(object):
         self._expression = " ".join(text.replace(self.comment, "").split())
 
     def check_trigger(self, when=None):
+        """
+        - when: Time in the form of a Unix timestamp, (Y, M, D, HH, MM[, SS])
+          local time tuple or a 9-element time tuple (time.struct_time). If
+          this argument is `None`, the current time is used.
+        """
         return constraints_satisfied(
             when, self._epoch, self._with_seconds, *self._expression_sets)
 
@@ -579,7 +587,6 @@ def check_monotonic(value, series):
     Returns: A boolean True or False indicating membership.
     """
     if series:
-        # TODO: unit test proper support of 0s
         if not value:
             return True
 
@@ -778,7 +785,23 @@ def generate_constraint_sets(parts, epoch):
     return annotations, Fields(*monotonic_periods), Fields(*fixed_values)
 
 
-def constraints_satisfied(when, epoch, with_seconds, annotations, monotonic_periods, fixed_values):
+def constraints_satisfied(when, epoch, with_seconds, *constraints):
+    """
+    Check whether a given time matches a set of cron expression constraints.
+
+    Arguments:
+    - when: Time in the form of a Unix timestamp, (Y, M, D, HH, MM[, SS]) local
+      time tuple or a 9-element time tuple (time.struct_time). If this argument
+      is `None`, the current time is used.
+    - epoch: Moment from which monotonic expressions begin counting.
+    - with_seconds: Boolean value indicating if the constraints include
+      seconds.
+    - *constraints: Set of constraints returned by generate_constraint_sets.
+
+    Returns: A boolean value.
+    """
+    annotations, monotonic_periods, fixed_values = constraints
+
     if when is None:
         when = int(time.time())
     elif isinstance(when, float):
