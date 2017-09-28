@@ -715,10 +715,6 @@ def simplify_monotonic_series(series):
     factors = list()
 
     for value in sorted(series):
-        if not factors:
-            factors.append(value)
-            continue
-
         for factor in factors:
             if not (value % factor):
                 break
