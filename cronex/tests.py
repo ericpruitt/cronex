@@ -549,13 +549,13 @@ class TestAtomicExpressionParsing(TestCase):
 
 
 class TestConstraintGeneration(TestCase):
-    def test_generate_expression_sets(self):
+    def test_generate_constraint_sets(self):
         pass
 
 
 class TestCronExpression(TestCase):
     def test_field_count_validation(self):
-        with mock(cronex, "generate_expression_sets"):
+        with mock(cronex, "generate_constraint_sets"):
             self.assertRaises(cronex.MissingFieldsError,
                 cronex.CronExpression, "* * * *"
             )
@@ -584,7 +584,7 @@ class TestCronExpression(TestCase):
             (("@daily", "QQQ WWW"),    ("@daily       QQQ WWW  ", )),
         ]
 
-        with mock(cronex, "generate_expression_sets"):
+        with mock(cronex, "generate_constraint_sets"):
             for (expected_expression, expected_comment), args in test_cases:
                 c = cronex.CronExpression(*args)
                 self.assertEqual(expected_expression, c.expression)

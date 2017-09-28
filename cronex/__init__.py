@@ -266,7 +266,7 @@ class CronExpression(object):
             raise Error("%r is not a supported epoch type" % (epoch, ))
 
         try:
-            self._expression_sets = generate_expression_sets(fields, epoch)
+            self._expression_sets = generate_constraint_sets(fields, epoch)
         except Error as e:
             raise Error("%s: %s" % (text.strip(), e))
 
@@ -728,7 +728,7 @@ def simplify_monotonic_series(series):
     return frozenset(factors)
 
 
-def generate_expression_sets(parts, epoch):
+def generate_constraint_sets(parts, epoch):
     """
     Convert an iterable containing cron expression fields into machine-friendly
     data structures.
@@ -739,11 +739,11 @@ def generate_expression_sets(parts, epoch):
     - epoch: Epoch representing the date and / or time from which monotonic
       expressions begin counting.
 
-    Returns: A tuple with 3 elements representing different expressions. The
+    Returns: A tuple with 3 elements representing different constraints. The
     first element contains a set of annotations for days that match the
     expressions, the second contains one set for each field representing the
     monotonic expressions, and the third element contains one set for each
-    field representing fixed expressions.
+    field representing fixed-value expressions.
     """
     annotations = set()
     fixed_values = list()
@@ -762,8 +762,8 @@ def generate_expression_sets(parts, epoch):
             elif mode == EXPRESSION_FIXED:
                 fixed_field_values.update(value)
 
-        # Any field with a set of fixed expressions that include all possible
-        # values are replaced with ASTERISK references.
+        # Any field with a set of fixed-value expressions that include all
+        # possible values are replaced with ASTERISK references.
         begin, end = FIELD_RANGES[field]
         if len(fixed_field_values) == (end - begin + 1):
             fixed_field_values = ASTERISK
