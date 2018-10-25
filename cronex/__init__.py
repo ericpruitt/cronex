@@ -342,7 +342,7 @@ def parse_atom(parse, minmax):
                 raise ValueError("\"%s\" is not within valid range." % parse)
         elif subrange.isdigit():
             # Handle offset increments e.g. 5/15 to run at :05, :20, :35, and :50
-            return set(xrange(subrange,minmax[1] + 1), increment)
+            return set(xrange(int(subrange),minmax[1] + 1, increment))
         elif subrange == '*':
             # Include all values with the given range
             prefix, suffix = minmax
