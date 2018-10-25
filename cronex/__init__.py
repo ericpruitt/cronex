@@ -341,6 +341,9 @@ def parse_atom(parse, minmax):
             prefix, suffix = [int(n) for n in subrange.split('-')]
             if prefix < minmax[0] or suffix > minmax[1]:
                 raise ValueError("\"%s\" is not within valid range." % parse)
+        elif subrange.isdigit():
+            # Handle offset increments e.g. 5/15 to run at :05, :20, :35, and :50
+            return set(xrange(int(subrange), minmax[1] + 1, increment))
         elif subrange == '*':
             # Include all values with the given range
             prefix, suffix = minmax

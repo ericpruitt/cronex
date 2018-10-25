@@ -143,7 +143,10 @@ class test_testedmodule(unittest.TestCase):
             (('*', (1, 100)), set(xrange(1, 101))),
             (('*/5', (1, 100)), set(xrange(1, 101, 5))),
             (('666', (1, 1000)), set([666])),
-            (('21-1', (0, 23)), set([21, 22, 23, 0, 1]))]
+            (('21-1', (0, 23)), set([21, 22, 23, 0, 1])),
+            (('5/15', (0, 60)), set([5, 20, 35, 50])),
+            (('1/4', (0, 23)), set([1, 5, 9, 13, 17, 21])),
+        ]
 
         for give_the_function, want_from_function in input_expect:
             self.assertEqual(want_from_function,
