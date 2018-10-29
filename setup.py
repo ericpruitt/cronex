@@ -16,7 +16,7 @@ except OSError:
 
 setup(
     name="cronex",
-    version="0.1.2",
+    version="0.1.3",
     description=("This module provides an easy to use interface for cron-like"
                  " task scheduling."),
     author="Eric Pruitt",
