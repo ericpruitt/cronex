@@ -5,18 +5,13 @@ except ImportError:
 
 import subprocess
 
-# If pandoc is available, convert the markdown README to REstructured Text.
-try:
-    pandoc = subprocess.Popen(["pandoc", "-t", "rst", "README.md"],
-                              stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE)
-    long_description, _ = pandoc.communicate()
-except OSError:
-    long_description = None
+pandoc = subprocess.Popen(["pandoc", "-t", "rst", "README.md"],
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+long_description, _ = pandoc.communicate()
 
 setup(
     name="cronex",
-    version="0.1.3",
+    version="0.1.3.1",
     description=("This module provides an easy to use interface for cron-like"
                  " task scheduling."),
     author="Eric Pruitt",
@@ -25,7 +20,7 @@ setup(
     license="MIT",
     keywords=["cron", "scheduler", "triggers", "time", "quartz"],
     packages=["cronex"],
-    long_description=long_description,
+    long_description=long_description.decode("utf-8"),
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX",
