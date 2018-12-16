@@ -55,13 +55,16 @@ handful of lines.
     import cronex
 
     while True:
+        start = time.time()
+        
         for line in open("crontab"):
             job = cronex.CronExpression(line.strip())
 
             if job.check_trigger(time.gmtime(time.time())[:5]):
                 os.system("(" + job.comment + ") & disown")
-
-        time.sleep(60)
+                
+        duration = time.time() - start
+        time.sleep(60 - dur)
 
 Expression Syntax
 -----------------
