@@ -425,6 +425,48 @@ class test_testedmodule(unittest.TestCase):
             return
         cronex.CronExpression(unicode("* * * * * ABC"))
 
+    def test_vixie_cron_wildcard_flags(self):
+        """
+        Test the arguments do_wild and do_non_wild, which can be used to
+        implement the Vixie cron local time jump tracking algorithm, where
+        non-wildcard and wildcard job execution behavior is changed
+        intelligently in the presence of DST transitions and most forward and
+        reverse clock skew occurrences.
+        """
+
+        # note: normal cron behavior when do_wild=True, do_non_wild=True
+        # other combinations are used during time jump errors
+
+        # matches when do_wild=True
+        testex1 = cronex.CronExpression("* * * * *")
+        # matches when do_non_wild=True
+        testex2 = cronex.CronExpression("0 1 * * *")
+
+        # matches testex1 when do_wild=True and do_non_wild=True
+        tuple1 = (2017, 9, 11, 1, 0)
+        # matches testex1 when do_wild=True only and not testex2
+        tuple2 = (2017, 9, 11, 2, 1)
+
+        self.assertTrue(testex1.check_trigger(tuple1, do_wild=True, do_non_wild=True))
+        self.assertTrue(testex1.check_trigger(tuple1, do_wild=True, do_non_wild=False))
+        self.assertFalse(testex1.check_trigger(tuple1, do_wild=False, do_non_wild=True))
+        self.assertFalse(testex1.check_trigger(tuple1, do_wild=False, do_non_wild=False))
+
+        self.assertTrue(testex2.check_trigger(tuple1, do_wild=True, do_non_wild=True))
+        self.assertTrue(testex2.check_trigger(tuple1, do_wild=False, do_non_wild=True))
+        self.assertFalse(testex2.check_trigger(tuple1, do_wild=True, do_non_wild=False))
+        self.assertFalse(testex2.check_trigger(tuple1, do_wild=False, do_non_wild=False))
+
+        self.assertTrue(testex1.check_trigger(tuple2, do_wild=True, do_non_wild=True))
+        self.assertTrue(testex1.check_trigger(tuple2, do_wild=True, do_non_wild=False))
+        self.assertFalse(testex1.check_trigger(tuple2, do_wild=False, do_non_wild=True))
+        self.assertFalse(testex1.check_trigger(tuple2, do_wild=False, do_non_wild=False))
+
+        self.assertFalse(testex2.check_trigger(tuple2, do_wild=True, do_non_wild=True))
+        self.assertFalse(testex2.check_trigger(tuple2, do_wild=False, do_non_wild=True))
+        self.assertFalse(testex2.check_trigger(tuple2, do_wild=True, do_non_wild=False))
+        self.assertFalse(testex2.check_trigger(tuple2, do_wild=False, do_non_wild=False))
+
 
 if __name__ == "__main__":
     unittest.main()
