@@ -126,6 +126,17 @@ class CronExpression(object):
     def __str__(self):
         return repr(self)
 
+    def __eq__(self, other):
+        if not hasattr(other, 'string_tab'):
+            return False
+        return self.string_tab == other.string_tab
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is not NotImplemented:
+            return not result
+        return NotImplemented
+
     def compute_numtab(self):
         """
         Recomputes the sets for the static ranges of the trigger time.

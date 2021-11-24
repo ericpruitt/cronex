@@ -425,6 +425,13 @@ class test_testedmodule(unittest.TestCase):
             return
         cronex.CronExpression(unicode("* * * * * ABC"))
 
+    def test_equivalence(self):
+        line = "* * * * *"
+        alt_line = "* * * * 1"
+        self.assertEqual(cronex.CronExpression(line), cronex.CronExpression(line))
+        self.assertNotEqual(cronex.CronExpression(line), cronex.CronExpression(alt_line))
+        self.assertNotEqual(cronex.CronExpression(line), 'some other object')
+
 
 if __name__ == "__main__":
     unittest.main()
